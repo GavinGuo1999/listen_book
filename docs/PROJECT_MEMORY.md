@@ -138,6 +138,8 @@ Get-Content -Path docs\PROJECT_MEMORY.md -Encoding UTF8
 - `.venv\Scripts\python.exe -m pytest backend\tests -q` 通过。
 - `.venv\Scripts\ruff.exe check --no-cache backend\app backend\tests scripts\smoke_api.py` 通过。
 - `npm run build` 在 v0.2 稳定性改动后通过。
+- 用户收工前反馈测试无明显问题；当前无阻塞问题。
+- 尚未接入正式浏览器 E2E，浏览器播放路径暂按 `docs/runbook.md` 手工验收。
 
 下次优先任务：
 
