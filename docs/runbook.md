@@ -124,18 +124,29 @@ cd D:\listen_book
 5. 保存并读取阅读进度
 6. 删除临时测试书籍
 
-## 手工浏览器验收
+## E2E 浏览器测试
 
-当前还没有正式 Playwright 脚本。涉及 `<audio>` 和真实 TTS 的浏览器路径先按下面步骤手测：
+Playwright E2E 测试覆盖上传、解析等待、阅读进度恢复和删除等关键路径。当前脚本刻意不触发真实 TTS，避免 E2E 依赖外部网络。
 
-1. 打开 `http://127.0.0.1:5173/`
-2. 上传或选择一本 `ready` 书籍
-3. 点击一句正文，应高亮并开始生成/播放音频
-4. 播放 8-10 秒后暂停
-5. 刷新页面或重新选择这本书
-6. 再点播放，应从接近暂停的位置继续
-7. 点击“预生成本章”，句子状态点应逐步变为 ready
-8. 删除当前书籍，阅读区、播放状态和缓存状态应清空
+运行前提：后端服务已在 `http://127.0.0.1:8000` 运行。
+
+```powershell
+cd D:\listen_book\frontend
+
+# headless 运行（CI / 快速验证）
+npm run test:e2e
+
+# 可见浏览器（调试用）
+npx playwright test --headed
+
+# 只跑某个文件
+npx playwright test e2e/books.spec.ts
+```
+
+测试文件：`frontend/e2e/books.spec.ts`
+Playwright 配置：`frontend/playwright.config.ts`
+
+注意：E2E 测试会复用已运行的前端 dev server；如果前端未运行，Playwright 会临时启动一个测试用 dev server。后端服务仍需提前手动启动。
 
 ## 手动 worker 兜底
 

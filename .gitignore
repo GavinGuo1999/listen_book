@@ -11,6 +11,8 @@ node_modules/
 dist/
 .vite/
 *.tsbuildinfo
+playwright-report/
+test-results/
 
 storage/uploads/*
 storage/parsed/*
