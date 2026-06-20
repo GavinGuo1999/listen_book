@@ -1,18 +1,35 @@
-import { BookOpen, Loader2, Pause, Play, SkipBack, SkipForward, Trash2, Upload } from "lucide-react";
+import {
+  BookOpen,
+  Loader2,
+  LogOut,
+  Pause,
+  Play,
+  SkipBack,
+  SkipForward,
+  Trash2,
+  Upload,
+  UserRound
+} from "lucide-react";
+import type { FormEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   deleteBook as deleteBookRequest,
+  fetchCurrentUser,
   fetchBookProgress,
   fetchSentenceAudioStatuses,
   fetchBooks,
   fetchChapters,
   generateSentenceAudio,
+  getStoredAuthToken,
+  loginUser,
   prefetchSentenceAudio,
+  registerUser,
   saveBookProgress,
+  setStoredAuthToken,
   uploadBook
 } from "./api";
-import type { AudioAsset, BookSummary, Chapter, Sentence } from "./types";
+import type { AudioAsset, BookSummary, Chapter, Sentence, User } from "./types";
 
 const PROCESSING_STATUSES = new Set(["uploaded", "parsing"]);
 const INITIAL_PREFETCH_SENTENCE_COUNT = 5;
@@ -26,6 +43,8 @@ type RestoredPlaybackPosition = {
   audioPositionMs: number;
 };
 
+type AuthMode = "login" | "register";
+
 export function App() {
   const [books, setBooks] = useState<BookSummary[]>([]);
   const [chapters, setChapters] = useState<Chapter[]>([]);
@@ -38,6 +57,13 @@ export function App() {
   const [activePrefetchChapterId, setActivePrefetchChapterId] = useState<string | null>(null);
   const [deletingBookId, setDeletingBookId] = useState<string | null>(null);
   const [bookPendingDelete, setBookPendingDelete] = useState<BookSummary | null>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [authMode, setAuthMode] = useState<AuthMode>("login");
+  const [authUsername, setAuthUsername] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authDisplayName, setAuthDisplayName] = useState("");
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [isAuthSubmitting, setIsAuthSubmitting] = useState(false);
   const [audioAssetsBySentenceId, setAudioAssetsBySentenceId] = useState<Record<string, AudioAsset>>(
     {}
   );
@@ -52,8 +78,19 @@ export function App() {
   const restoredPlaybackPositionRef = useRef<RestoredPlaybackPosition | null>(null);
 
   useEffect(() => {
+    loadCurrentUser();
     refreshBooks();
   }, []);
+
+  async function loadCurrentUser() {
+    try {
+      const user = await fetchCurrentUser();
+      setCurrentUser(user);
+    } catch {
+      setStoredAuthToken(null);
+      setCurrentUser(null);
+    }
+  }
 
   async function refreshBooks(showLoading = true) {
     if (showLoading) {
@@ -72,6 +109,36 @@ export function App() {
         setIsLoadingBooks(false);
       }
     }
+  }
+
+  async function handleAuthSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setAuthError(null);
+    setIsAuthSubmitting(true);
+    try {
+      const response =
+        authMode === "login"
+          ? await loginUser(authUsername, authPassword)
+          : await registerUser(authUsername, authPassword, authDisplayName);
+      setStoredAuthToken(response.access_token);
+      setCurrentUser(response.user);
+      setAuthPassword("");
+      setAuthDisplayName("");
+      clearCurrentBookState();
+      await refreshBooks();
+    } catch (err) {
+      setAuthError(err instanceof Error ? err.message : "账号操作失败");
+    } finally {
+      setIsAuthSubmitting(false);
+    }
+  }
+
+  async function logout() {
+    setStoredAuthToken(null);
+    setAuthError(null);
+    clearCurrentBookState();
+    await loadCurrentUser();
+    await refreshBooks();
   }
 
   async function loadChapters(bookId: string) {
@@ -545,6 +612,74 @@ export function App() {
           <BookOpen size={22} />
           <h1>Listen Book</h1>
         </div>
+
+        <section className="account-card" data-testid="account-card">
+          <div className="account-current">
+            <UserRound size={18} />
+            <div>
+              <span>{currentUser?.display_name ?? "Local Reader"}</span>
+              <small>
+                {getStoredAuthToken() ? `@${currentUser?.username}` : "本地模式 · 未登录"}
+              </small>
+            </div>
+            {getStoredAuthToken() ? (
+              <button aria-label="退出登录" onClick={logout} title="退出登录" type="button">
+                <LogOut size={15} />
+              </button>
+            ) : null}
+          </div>
+
+          {!getStoredAuthToken() ? (
+            <form className="auth-form" onSubmit={handleAuthSubmit}>
+              <div className="auth-tabs">
+                <button
+                  className={authMode === "login" ? "active" : ""}
+                  onClick={() => setAuthMode("login")}
+                  type="button"
+                >
+                  登录
+                </button>
+                <button
+                  className={authMode === "register" ? "active" : ""}
+                  onClick={() => setAuthMode("register")}
+                  type="button"
+                >
+                  注册
+                </button>
+              </div>
+              <input
+                autoComplete="username"
+                onChange={(event) => setAuthUsername(event.target.value)}
+                placeholder="用户名"
+                required
+                type="text"
+                value={authUsername}
+              />
+              {authMode === "register" ? (
+                <input
+                  onChange={(event) => setAuthDisplayName(event.target.value)}
+                  placeholder="显示名（可选）"
+                  type="text"
+                  value={authDisplayName}
+                />
+              ) : null}
+              <input
+                autoComplete={authMode === "login" ? "current-password" : "new-password"}
+                minLength={6}
+                onChange={(event) => setAuthPassword(event.target.value)}
+                placeholder="密码"
+                required
+                type="password"
+                value={authPassword}
+              />
+              {authError ? <p className="auth-error">{authError}</p> : null}
+              <button disabled={isAuthSubmitting} type="submit">
+                {isAuthSubmitting ? <Loader2 className="spin" size={14} /> : null}
+                {authMode === "login" ? "登录账号" : "创建账号"}
+              </button>
+            </form>
+          ) : null}
+        </section>
 
         <label className="upload-button" data-testid="upload-book">
           <Upload size={18} />

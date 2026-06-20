@@ -1,13 +1,87 @@
 import type {
   AudioAsset,
   AudioPrefetchResponse,
+  AuthResponse,
   BookSummary,
   Chapter,
-  ReadingProgress
+  ReadingProgress,
+  User
 } from "./types";
 
+const AUTH_TOKEN_KEY = "listen_book_auth_token";
+
+export function getStoredAuthToken(): string | null {
+  return window.localStorage.getItem(AUTH_TOKEN_KEY);
+}
+
+export function setStoredAuthToken(token: string | null) {
+  if (token) {
+    window.localStorage.setItem(AUTH_TOKEN_KEY, token);
+  } else {
+    window.localStorage.removeItem(AUTH_TOKEN_KEY);
+  }
+}
+
+async function apiFetch(input: RequestInfo | URL, init: RequestInit = {}) {
+  const headers = new Headers(init.headers);
+  const token = getStoredAuthToken();
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+  return fetch(input, { ...init, headers });
+}
+
+async function readError(response: Response, fallback: string) {
+  const message = await response.text();
+  return message || fallback;
+}
+
+export async function fetchCurrentUser(): Promise<User> {
+  const response = await apiFetch("/api/auth/me");
+  if (!response.ok) {
+    throw new Error(await readError(response, "Failed to load current user"));
+  }
+  return response.json();
+}
+
+export async function registerUser(
+  username: string,
+  password: string,
+  displayName?: string
+): Promise<AuthResponse> {
+  const response = await apiFetch("/api/auth/register", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      username,
+      password,
+      display_name: displayName || null
+    })
+  });
+  if (!response.ok) {
+    throw new Error(await readError(response, "Failed to register"));
+  }
+  return response.json();
+}
+
+export async function loginUser(username: string, password: string): Promise<AuthResponse> {
+  const response = await apiFetch("/api/auth/login", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ username, password })
+  });
+  if (!response.ok) {
+    throw new Error(await readError(response, "Failed to login"));
+  }
+  return response.json();
+}
+
 export async function fetchBooks(): Promise<BookSummary[]> {
-  const response = await fetch("/api/books");
+  const response = await apiFetch("/api/books");
   if (!response.ok) {
     throw new Error("Failed to load books");
   }
@@ -18,29 +92,27 @@ export async function uploadBook(file: File): Promise<BookSummary> {
   const body = new FormData();
   body.append("file", file);
 
-  const response = await fetch("/api/books", {
+  const response = await apiFetch("/api/books", {
     method: "POST",
     body
   });
   if (!response.ok) {
-    const message = await response.text();
-    throw new Error(message || "Failed to upload book");
+    throw new Error(await readError(response, "Failed to upload book"));
   }
   return response.json();
 }
 
 export async function deleteBook(bookId: string): Promise<void> {
-  const response = await fetch(`/api/books/${bookId}`, {
+  const response = await apiFetch(`/api/books/${bookId}`, {
     method: "DELETE"
   });
   if (!response.ok) {
-    const message = await response.text();
-    throw new Error(message || "Failed to delete book");
+    throw new Error(await readError(response, "Failed to delete book"));
   }
 }
 
 export async function fetchChapters(bookId: string): Promise<Chapter[]> {
-  const response = await fetch(`/api/books/${bookId}/chapters`);
+  const response = await apiFetch(`/api/books/${bookId}/chapters`);
   if (!response.ok) {
     throw new Error("Failed to load chapters");
   }
@@ -48,7 +120,7 @@ export async function fetchChapters(bookId: string): Promise<Chapter[]> {
 }
 
 export async function fetchBookProgress(bookId: string): Promise<ReadingProgress | null> {
-  const response = await fetch(`/api/books/${bookId}/progress`);
+  const response = await apiFetch(`/api/books/${bookId}/progress`);
   if (!response.ok) {
     throw new Error("Failed to load reading progress");
   }
@@ -60,7 +132,7 @@ export async function saveBookProgress(
   sentenceId: string | null,
   audioPositionMs = 0
 ): Promise<ReadingProgress> {
-  const response = await fetch(`/api/books/${bookId}/progress`, {
+  const response = await apiFetch(`/api/books/${bookId}/progress`, {
     method: "PUT",
     headers: {
       "Content-Type": "application/json"
@@ -71,19 +143,17 @@ export async function saveBookProgress(
     })
   });
   if (!response.ok) {
-    const message = await response.text();
-    throw new Error(message || "Failed to save reading progress");
+    throw new Error(await readError(response, "Failed to save reading progress"));
   }
   return response.json();
 }
 
 export async function generateSentenceAudio(sentenceId: string): Promise<AudioAsset> {
-  const response = await fetch(`/api/audio/sentences/${sentenceId}`, {
+  const response = await apiFetch(`/api/audio/sentences/${sentenceId}`, {
     method: "POST"
   });
   if (!response.ok) {
-    const message = await response.text();
-    throw new Error(message || "Failed to generate audio");
+    throw new Error(await readError(response, "Failed to generate audio"));
   }
   return response.json();
 }
@@ -91,7 +161,7 @@ export async function generateSentenceAudio(sentenceId: string): Promise<AudioAs
 export async function prefetchSentenceAudio(
   sentenceIds: string[]
 ): Promise<AudioPrefetchResponse> {
-  const response = await fetch("/api/audio/sentences/prefetch", {
+  const response = await apiFetch("/api/audio/sentences/prefetch", {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
@@ -99,14 +169,13 @@ export async function prefetchSentenceAudio(
     body: JSON.stringify({ sentence_ids: sentenceIds })
   });
   if (!response.ok) {
-    const message = await response.text();
-    throw new Error(message || "Failed to prefetch audio");
+    throw new Error(await readError(response, "Failed to prefetch audio"));
   }
   return response.json();
 }
 
 export async function fetchSentenceAudioStatuses(sentenceIds: string[]): Promise<AudioAsset[]> {
-  const response = await fetch("/api/audio/sentences/status", {
+  const response = await apiFetch("/api/audio/sentences/status", {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
@@ -114,8 +183,7 @@ export async function fetchSentenceAudioStatuses(sentenceIds: string[]): Promise
     body: JSON.stringify({ sentence_ids: sentenceIds })
   });
   if (!response.ok) {
-    const message = await response.text();
-    throw new Error(message || "Failed to load audio statuses");
+    throw new Error(await readError(response, "Failed to load audio statuses"));
   }
   return response.json();
 }

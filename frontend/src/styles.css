@@ -47,6 +47,121 @@ button {
   font-weight: 700;
 }
 
+.account-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border: 1px solid #e1e4df;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 12px;
+}
+
+.account-current {
+  display: grid;
+  grid-template-columns: 22px 1fr 30px;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.account-current div {
+  min-width: 0;
+}
+
+.account-current span,
+.account-current small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-current span {
+  font-weight: 650;
+}
+
+.account-current small {
+  color: #647067;
+  font-size: 12px;
+}
+
+.account-current button {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #647067;
+  cursor: pointer;
+}
+
+.account-current button:hover {
+  background: #f0f2ee;
+  color: #202124;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.auth-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.auth-tabs button,
+.auth-form > button {
+  min-height: 32px;
+  border: 1px solid #c9d0c8;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #202124;
+  cursor: pointer;
+}
+
+.auth-tabs button.active,
+.auth-form > button {
+  border-color: #196b69;
+  background: #196b69;
+  color: #ffffff;
+}
+
+.auth-form > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-weight: 650;
+}
+
+.auth-form > button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.auth-form input {
+  width: 100%;
+  min-height: 34px;
+  border: 1px solid #c9d0c8;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #202124;
+  padding: 0 10px;
+}
+
+.auth-error {
+  margin: 0;
+  color: #9b2525;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .upload-button {
   display: flex;
   align-items: center;

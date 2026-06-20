@@ -6,8 +6,10 @@ from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Up
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models.book import Book, Chapter, Paragraph
+from app.models.user import User
 from app.schemas.book import (
     BookSummary,
     ChapterRead,
@@ -20,6 +22,7 @@ from app.workers.parse_books import run_once
 
 router = APIRouter()
 DbSession = Annotated[Session, Depends(get_db)]
+CurrentUser = Annotated[User, Depends(get_current_user)]
 BookUpload = Annotated[UploadFile, File(...)]
 logger = logging.getLogger(__name__)
 
@@ -60,8 +63,12 @@ def list_chapters(book_id: UUID, db: DbSession) -> list[Chapter]:
 
 
 @router.get("/{book_id}/progress", response_model=ReadingProgressRead | None)
-def read_book_progress(book_id: UUID, db: DbSession) -> ReadingProgressRead | None:
-    return get_book_progress(db, book_id)
+def read_book_progress(
+    book_id: UUID,
+    db: DbSession,
+    current_user: CurrentUser,
+) -> ReadingProgressRead | None:
+    return get_book_progress(db, book_id, current_user)
 
 
 @router.put("/{book_id}/progress", response_model=ReadingProgressRead)
@@ -69,12 +76,14 @@ def update_book_progress(
     book_id: UUID,
     payload: ReadingProgressUpdate,
     db: DbSession,
+    current_user: CurrentUser,
 ) -> ReadingProgressRead:
     return save_book_progress(
         db,
         book_id,
         sentence_id=payload.sentence_id,
         audio_position_ms=payload.audio_position_ms,
+        user=current_user,
     )
 
 

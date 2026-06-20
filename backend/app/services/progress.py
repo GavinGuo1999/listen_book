@@ -29,9 +29,13 @@ def get_or_create_default_user(db: Session) -> User:
     return user
 
 
-def get_book_progress(db: Session, book_id: UUID) -> ReadingProgress | None:
+def get_book_progress(
+    db: Session,
+    book_id: UUID,
+    user: User | None = None,
+) -> ReadingProgress | None:
     _ensure_book_exists(db, book_id)
-    user = get_or_create_default_user(db)
+    user = user or get_or_create_default_user(db)
     return db.scalar(
         select(ReadingProgress).where(
             ReadingProgress.user_id == user.id,
@@ -45,9 +49,10 @@ def save_book_progress(
     book_id: UUID,
     sentence_id: UUID | None,
     audio_position_ms: int = 0,
+    user: User | None = None,
 ) -> ReadingProgress:
     _ensure_book_exists(db, book_id)
-    user = get_or_create_default_user(db)
+    user = user or get_or_create_default_user(db)
 
     chapter_id: UUID | None = None
     paragraph_id: UUID | None = None

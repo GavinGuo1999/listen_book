@@ -46,3 +46,16 @@ export type ReadingProgress = {
   sentence_id: string | null;
   audio_position_ms: number;
 };
+
+export type User = {
+  id: string;
+  username: string;
+  display_name: string;
+  is_admin: boolean;
+};
+
+export type AuthResponse = {
+  access_token: string;
+  token_type: string;
+  user: User;
+};
