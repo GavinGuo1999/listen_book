@@ -61,7 +61,7 @@ Get-Content -Path docs\PROJECT_MEMORY.md -Encoding UTF8
 
 - FastAPI 后端基础结构
 - PostgreSQL 数据模型和 Alembic 迁移
-- TXT 上传和后台自动解析
+- TXT/EPUB 上传和后台自动解析
 - 非 UTF-8 TXT 解析回退：`utf-8-sig`、`utf-8`、`gb18030`、`big5`
 - Book -> Chapter -> Paragraph -> Sentence 数据结构
 - React 前端书库/阅读页基础 UI
@@ -77,15 +77,99 @@ Get-Content -Path docs\PROJECT_MEMORY.md -Encoding UTF8
 - 阅读进度保存最小版：默认本地用户、按书保存/读取当前句子、重新打开书时恢复高亮句
 - 精确播放位置保存/恢复：播放中低频保存 `audio_position_ms`，暂停立即保存，恢复播放时设置 `<audio>.currentTime`
 - 后端自动化测试第一批：上传解析、GB18030 解析、阅读进度、书籍删除清理
+- 后端音频接口测试：生成、缓存、失败重试、prefetch/status、文件端点安全检查
+- 正式浏览器 E2E smoke：上传 TXT、等待解析、阅读进度恢复、删除临时书
+- 登录/多用户进度隔离最小闭环：注册、登录、当前用户、退出登录、token 鉴权
+- 未登录时保留默认本地用户 `local` 模式；登录后阅读进度按用户隔离
 - 服务启动后的 API smoke 脚本：`scripts/smoke_api.py`
 - Windows 启停脚本：`scripts\start-dev.bat`、`scripts\stop-dev.bat`
 
 当前主要未完成：
 
-- 登录系统
-- EPUB/PDF 解析
+- PDF 解析
+- 完整书库归属/权限隔离
+- 登录链路浏览器 E2E
 - 更自然的小说朗读：更细的停顿、情绪、角色/旁白风格
-- 系统化浏览器 E2E 测试
+
+## 最近交接记录：2026-06-20
+
+今天完成：
+
+- 新增浏览器 E2E：
+  - `frontend/playwright.config.ts`
+  - `frontend/e2e/books.spec.ts`
+  - 覆盖首页加载、上传 TXT、等待解析、阅读进度恢复、删除临时测试书
+  - 测试刻意不触发真实 TTS，避免依赖外部网络
+- 扩展音频接口和失败路径测试：
+  - `backend/tests/test_audio_api.py`
+  - 覆盖音频生成、缓存复用、TTS 失败标记、失败重试、prefetch/status、文件端点安全检查
+- 完成 EPUB 解析最小版：
+  - `backend/app/services/epub.py`
+  - `backend/app/workers/parse_books.py`
+  - 使用 Python 标准库读取 EPUB zip、container、OPF manifest/spine、XHTML/HTML 正文
+  - 按章节/段落/句子入库
+  - 无效 EPUB 会将书籍标记为 `failed`
+- 完成登录/多用户进度隔离最小闭环：
+  - `POST /api/auth/register`
+  - `POST /api/auth/login`
+  - `GET /api/auth/me`
+  - 前端侧栏新增账号卡、登录/注册、退出登录
+  - API 自动携带 token
+  - 无 token 时仍使用默认本地用户 `local`
+  - 登录用户的阅读进度互相隔离
+- 更新 README 和 runbook：
+  - 记录 TXT/EPUB 支持
+  - 记录 E2E、auth、音频测试覆盖范围
+
+今天提交：
+
+- `7f6dee0 test: add browser e2e and audio api coverage`
+- `7454f13 feat: parse epub uploads`
+- `ce3047c feat: add auth and user progress isolation`
+
+今天验证：
+
+- 用户实机运行 E2E：`2 passed`
+- `.venv\Scripts\python.exe -m pytest backend\tests -q` 通过，当前为 `15 passed`
+- `.venv\Scripts\ruff.exe check --no-cache backend\app backend\tests scripts\smoke_api.py` 通过
+- `npm run build` 通过
+- `git diff --check` 通过
+
+当前注意事项：
+
+- 今天没有推送远端；本地 `master` 比 `origin/master` 多 3 个功能提交，另有本交接文档提交待处理/待推送。
+- 后端和前端代码变更后，明天实机测试前建议先重启服务：
+
+```bat
+scripts\stop-dev.bat
+scripts\start-dev.bat
+```
+
+- 登录功能是最小闭环：已实现注册、登录、token、当前用户、退出登录和进度隔离；尚未实现完整书库归属/权限隔离。
+- 当前浏览器 E2E 仍覆盖未登录本地模式；登录链路 E2E 还没补。
+- PDF 解析仍未实现。
+
+明天建议测试顺序：
+
+1. 先启动服务并检查：
+   - `http://127.0.0.1:8000/api/health`
+   - `http://127.0.0.1:5173/`
+2. 跑自动化：
+   - `.venv\Scripts\python.exe -m pytest backend\tests -q`
+   - `cd frontend && npm run test:e2e`
+3. 浏览器手测：
+   - 未登录本地模式能否正常上传/阅读/保存进度
+   - 注册一个新用户并登录
+   - 登录用户上传 TXT/EPUB 是否能解析
+   - 登录用户 A 和未登录本地模式/用户 B 的阅读进度是否互不覆盖
+   - 退出登录后是否回到本地模式
+
+下次优先任务：
+
+1. 补登录/注册浏览器 E2E。
+2. 做书库归属/权限隔离设计：公共书库还是用户私有书库需要先定。
+3. 继续 PDF 解析，或先完善 EPUB 解析质量。
+4. 改善小说朗读体验。
 
 ## 最近交接记录：2026-06-19
 
