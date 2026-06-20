@@ -1,4 +1,5 @@
 from uuid import uuid4
+from zipfile import ZIP_DEFLATED, ZipFile
 
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -49,6 +50,57 @@ def test_upload_gb18030_txt_parses_book_to_ready(client: TestClient) -> None:
     assert chapters_response.status_code == 200
     sentences = chapters_response.json()[0]["paragraphs"][0]["sentences"]
     assert sentences[0]["text"] == "增广贤文。"
+
+
+def test_upload_epub_parses_spine_chapters_to_ready(client: TestClient, tmp_path) -> None:
+    epub_path = tmp_path / "sample.epub"
+    create_minimal_epub(epub_path)
+
+    response = client.post(
+        "/api/books",
+        files={"file": ("sample.epub", epub_path.read_bytes(), "application/epub+zip")},
+    )
+
+    assert response.status_code == 201
+    book_id = response.json()["id"]
+
+    books_response = client.get("/api/books")
+    assert books_response.status_code == 200
+    assert books_response.json()[0]["status"] == BookStatus.READY.value
+
+    chapters_response = client.get(f"/api/books/{book_id}/chapters")
+    assert chapters_response.status_code == 200
+    chapters = chapters_response.json()
+    assert [chapter["title"] for chapter in chapters] == ["第一章", "第二章"]
+
+    first_chapter_sentences = [
+        sentence["text"]
+        for paragraph in chapters[0]["paragraphs"]
+        for sentence in paragraph["sentences"]
+    ]
+    second_chapter_sentences = [
+        sentence["text"]
+        for paragraph in chapters[1]["paragraphs"]
+        for sentence in paragraph["sentences"]
+    ]
+    assert first_chapter_sentences == ["第一章", "第一句。", "第二句？"]
+    assert second_chapter_sentences == ["第二章", "第三句！"]
+
+
+def test_upload_invalid_epub_marks_book_failed(client: TestClient) -> None:
+    response = client.post(
+        "/api/books",
+        files={"file": ("broken.epub", b"not a zip", "application/epub+zip")},
+    )
+
+    assert response.status_code == 201
+    book_id = response.json()["id"]
+
+    books_response = client.get("/api/books")
+    assert books_response.status_code == 200
+    [book] = books_response.json()
+    assert book["id"] == book_id
+    assert book["status"] == BookStatus.FAILED.value
 
 
 def test_progress_api_saves_reads_and_validates_sentence(
@@ -184,3 +236,51 @@ def create_ready_book(db_session: Session, title: str = "Sample") -> tuple[Book,
     db_session.refresh(book)
     db_session.refresh(sentence)
     return book, sentence
+
+
+def create_minimal_epub(path) -> None:
+    with ZipFile(path, "w", compression=ZIP_DEFLATED) as epub:
+        epub.writestr("mimetype", "application/epub+zip", compress_type=0)
+        epub.writestr(
+            "META-INF/container.xml",
+            """<?xml version="1.0" encoding="UTF-8"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <rootfiles>
+    <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
+  </rootfiles>
+</container>
+""",
+        )
+        epub.writestr(
+            "OEBPS/content.opf",
+            """<?xml version="1.0" encoding="UTF-8"?>
+<package version="3.0" xmlns="http://www.idpf.org/2007/opf">
+  <manifest>
+    <item id="chap1" href="chapter1.xhtml" media-type="application/xhtml+xml"/>
+    <item id="chap2" href="chapter2.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine>
+    <itemref idref="chap1"/>
+    <itemref idref="chap2"/>
+  </spine>
+</package>
+""",
+        )
+        epub.writestr(
+            "OEBPS/chapter1.xhtml",
+            """<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head><title>第一章</title><style>p { color: red; }</style></head>
+  <body><h1>第一章</h1><p>第一句。第二句？</p></body>
+</html>
+""",
+        )
+        epub.writestr(
+            "OEBPS/chapter2.xhtml",
+            """<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head><title>第二章</title></head>
+  <body><h1>第二章</h1><p>第三句！</p></body>
+</html>
+""",
+        )

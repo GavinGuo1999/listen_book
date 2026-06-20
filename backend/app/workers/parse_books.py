@@ -6,6 +6,7 @@ from sqlalchemy import select
 from app.db.session import SessionLocal
 from app.models.book import Book, BookStatus, Chapter, Paragraph, Sentence
 from app.models.job import Job, JobStatus, JobType
+from app.services.epub import read_epub_chapters
 from app.services.text_splitter import split_paragraphs, split_sentences, text_hash
 
 TXT_ENCODINGS = ("utf-8-sig", "utf-8", "gb18030", "big5")
@@ -44,11 +45,38 @@ def parse_txt_book(job: Job) -> None:
         db.commit()
 
         raw_text = read_txt_text(storage_path)
-        chapter = Chapter(book_id=book.id, title="\u6b63\u6587", chapter_index=0)
+        insert_chapters(db, book, [("\u6b63\u6587", raw_text)])
+
+        book.status = BookStatus.READY.value
+        db.commit()
+
+
+def parse_epub_book(job: Job) -> None:
+    book_id = UUID(job.payload["book_id"])
+    storage_path = Path(job.payload["storage_path"])
+
+    with SessionLocal() as db:
+        book = db.get(Book, book_id)
+        if book is None:
+            raise RuntimeError(f"Book not found: {book_id}")
+
+        book.status = BookStatus.PARSING.value
+        book.error_message = None
+        db.commit()
+
+        insert_chapters(db, book, read_epub_chapters(storage_path))
+
+        book.status = BookStatus.READY.value
+        db.commit()
+
+
+def insert_chapters(db, book: Book, chapters: list[tuple[str, str]]) -> None:
+    for chapter_index, (chapter_title, chapter_text) in enumerate(chapters):
+        chapter = Chapter(book_id=book.id, title=chapter_title, chapter_index=chapter_index)
         db.add(chapter)
         db.flush()
 
-        for paragraph_index, paragraph_text in enumerate(split_paragraphs(raw_text)):
+        for paragraph_index, paragraph_text in enumerate(split_paragraphs(chapter_text)):
             paragraph = Paragraph(
                 chapter_id=chapter.id,
                 paragraph_index=paragraph_index,
@@ -66,9 +94,6 @@ def parse_txt_book(job: Job) -> None:
                         text_hash=text_hash(sentence_text),
                     )
                 )
-
-        book.status = BookStatus.READY.value
-        db.commit()
 
 
 def run_once() -> int:
@@ -90,9 +115,13 @@ def run_once() -> int:
         db.refresh(job)
 
     try:
-        if job.payload.get("format") != "txt":
-            raise RuntimeError("Only TXT parsing is implemented in the first worker version")
-        parse_txt_book(job)
+        match job.payload.get("format"):
+            case "txt":
+                parse_txt_book(job)
+            case "epub":
+                parse_epub_book(job)
+            case unsupported_format:
+                raise RuntimeError(f"Unsupported parse format: {unsupported_format}")
     except Exception as exc:
         with SessionLocal() as db:
             failed_job = db.get(Job, job.id)
