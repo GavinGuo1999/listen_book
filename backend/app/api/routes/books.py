@@ -11,6 +11,7 @@ from app.db.session import get_db
 from app.models.book import Book, Chapter, Paragraph
 from app.models.user import User
 from app.schemas.book import (
+    AdminBookReviewSummary,
     BookReviewUpdate,
     BookSummary,
     ChapterRead,
@@ -21,6 +22,7 @@ from app.services.books import (
     create_uploaded_book,
     delete_book,
     ensure_book_accessible,
+    list_admin_review_books,
     list_visible_books,
     review_book,
 )
@@ -60,6 +62,12 @@ def upload_book(
     return book
 
 
+@router.get("/admin/reviews", response_model=list[AdminBookReviewSummary])
+def list_admin_reviews(db: DbSession, admin_user: AdminUser) -> list[Book]:
+    del admin_user
+    return list_admin_review_books(db)
+
+
 @router.patch("/{book_id}/review", response_model=BookSummary)
 def update_book_review(
     book_id: UUID,
@@ -67,10 +75,10 @@ def update_book_review(
     db: DbSession,
     admin_user: AdminUser,
 ) -> Book:
-    del admin_user
     return review_book(
         db,
         book_id,
+        reviewer=admin_user,
         review_status=payload.review_status,
         review_note=payload.review_note,
     )

@@ -17,6 +17,25 @@ class BookSummary(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class BookReviewEventRead(BaseModel):
+    id: UUID
+    reviewer_id: UUID | None
+    reviewer_username: str | None = None
+    reviewer_display_name: str | None = None
+    from_review_status: str
+    to_review_status: str
+    note: str | None = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class AdminBookReviewSummary(BookSummary):
+    uploader_username: str | None = None
+    uploader_display_name: str | None = None
+    review_history: list[BookReviewEventRead] = Field(default_factory=list)
+
+
 class BookReviewUpdate(BaseModel):
     review_status: str = Field(pattern="^(approved|rejected|pending_review)$")
     review_note: str | None = None

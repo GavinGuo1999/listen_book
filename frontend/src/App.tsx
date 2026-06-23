@@ -15,6 +15,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   deleteBook as deleteBookRequest,
+  fetchAdminBookReviews,
   fetchCurrentUser,
   fetchBookProgress,
   fetchSentenceAudioStatuses,
@@ -30,7 +31,14 @@ import {
   setStoredAuthToken,
   uploadBook
 } from "./api";
-import type { AudioAsset, BookSummary, Chapter, Sentence, User } from "./types";
+import type {
+  AdminBookReviewSummary,
+  AudioAsset,
+  BookSummary,
+  Chapter,
+  Sentence,
+  User
+} from "./types";
 
 const PROCESSING_STATUSES = new Set(["uploaded", "parsing"]);
 const INITIAL_PREFETCH_SENTENCE_COUNT = 5;
@@ -38,6 +46,7 @@ const PLAYBACK_PREFETCH_SENTENCE_COUNT = 8;
 const PREFETCH_BATCH_SIZE = 20;
 const AUDIO_STATUS_POLL_INTERVAL_MS = 2500;
 const PROGRESS_SAVE_INTERVAL_MS = 5000;
+const REVIEW_QUEUE_PAGE_SIZE = 5;
 
 type RestoredPlaybackPosition = {
   sentenceId: string;
@@ -45,20 +54,25 @@ type RestoredPlaybackPosition = {
 };
 
 type AuthMode = "login" | "register";
+type ReviewQueueFilter = "pending" | "failed" | "rejected" | "all";
 
 export function App() {
   const [books, setBooks] = useState<BookSummary[]>([]);
+  const [adminReviewBooks, setAdminReviewBooks] = useState<AdminBookReviewSummary[]>([]);
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [selectedBookId, setSelectedBookId] = useState<string | null>(null);
   const [currentSentenceId, setCurrentSentenceId] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
   const [isLoadingBooks, setIsLoadingBooks] = useState(true);
+  const [isLoadingAdminReviews, setIsLoadingAdminReviews] = useState(false);
   const [isLoadingChapters, setIsLoadingChapters] = useState(false);
   const [activePrefetchChapterId, setActivePrefetchChapterId] = useState<string | null>(null);
   const [deletingBookId, setDeletingBookId] = useState<string | null>(null);
   const [reviewingBookId, setReviewingBookId] = useState<string | null>(null);
   const [reviewNotesByBookId, setReviewNotesByBookId] = useState<Record<string, string>>({});
+  const [reviewQueueFilter, setReviewQueueFilter] = useState<ReviewQueueFilter>("pending");
+  const [reviewQueuePage, setReviewQueuePage] = useState(1);
   const [bookPendingDelete, setBookPendingDelete] = useState<BookSummary | null>(null);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [authMode, setAuthMode] = useState<AuthMode>("login");
@@ -86,6 +100,15 @@ export function App() {
     refreshBooks();
   }, []);
 
+  useEffect(() => {
+    if (currentUser?.is_admin) {
+      refreshAdminReviewBooks();
+    } else {
+      setAdminReviewBooks([]);
+      setReviewQueuePage(1);
+    }
+  }, [currentUser?.is_admin]);
+
   async function loadCurrentUser() {
     try {
       const user = await fetchCurrentUser();
@@ -111,6 +134,24 @@ export function App() {
     } finally {
       if (showLoading) {
         setIsLoadingBooks(false);
+      }
+    }
+  }
+
+  async function refreshAdminReviewBooks(showLoading = true) {
+    if (showLoading) {
+      setIsLoadingAdminReviews(true);
+    }
+    try {
+      const nextBooks = await fetchAdminBookReviews();
+      setAdminReviewBooks(nextBooks);
+      return nextBooks;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "加载审批列表失败");
+      return [];
+    } finally {
+      if (showLoading) {
+        setIsLoadingAdminReviews(false);
       }
     }
   }
@@ -287,6 +328,9 @@ export function App() {
         return next;
       });
       await refreshBooks(false);
+      if (currentUser?.is_admin) {
+        await refreshAdminReviewBooks(false);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "审批失败");
     } finally {
@@ -324,10 +368,36 @@ export function App() {
     [books, selectedBookId]
   );
 
-  const pendingReviewBooks = useMemo(
-    () => books.filter((book) => book.review_status === "pending_review"),
-    [books]
+  const filteredAdminReviewBooks = useMemo(() => {
+    if (reviewQueueFilter === "pending") {
+      return adminReviewBooks.filter((book) => book.review_status === "pending_review");
+    }
+    if (reviewQueueFilter === "failed") {
+      return adminReviewBooks.filter((book) => book.status === "failed");
+    }
+    if (reviewQueueFilter === "rejected") {
+      return adminReviewBooks.filter((book) => book.review_status === "rejected");
+    }
+    return adminReviewBooks;
+  }, [adminReviewBooks, reviewQueueFilter]);
+
+  const reviewQueuePageCount = Math.max(
+    1,
+    Math.ceil(filteredAdminReviewBooks.length / REVIEW_QUEUE_PAGE_SIZE)
   );
+
+  const pagedAdminReviewBooks = filteredAdminReviewBooks.slice(
+    (reviewQueuePage - 1) * REVIEW_QUEUE_PAGE_SIZE,
+    reviewQueuePage * REVIEW_QUEUE_PAGE_SIZE
+  );
+
+  useEffect(() => {
+    setReviewQueuePage(1);
+  }, [reviewQueueFilter]);
+
+  useEffect(() => {
+    setReviewQueuePage((current) => Math.min(current, reviewQueuePageCount));
+  }, [reviewQueuePageCount]);
 
   function reviewStatusLabel(status: string) {
     if (status === "pending_review") {
@@ -337,6 +407,25 @@ export function App() {
       return "已拒绝";
     }
     return "已发布";
+  }
+
+  function reviewerLabel(book: AdminBookReviewSummary) {
+    if (book.uploader_display_name && book.uploader_username) {
+      return `${book.uploader_display_name} @${book.uploader_username}`;
+    }
+    return book.uploader_username ? `@${book.uploader_username}` : "本地/未知上传者";
+  }
+
+  function formatDateTime(value: string | null | undefined) {
+    if (!value) {
+      return "未知时间";
+    }
+    return new Intl.DateTimeFormat("zh-CN", {
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit"
+    }).format(new Date(value));
   }
 
   function canDeleteBook(book: BookSummary) {
@@ -767,15 +856,38 @@ export function App() {
             <div className="review-queue-header">
               <div>
                 <p className="eyebrow">管理员</p>
-                <h2>待审批书籍</h2>
+                <h2>审核中心</h2>
               </div>
-              <span>{pendingReviewBooks.length}</span>
+              <span>{filteredAdminReviewBooks.length}</span>
             </div>
-            {pendingReviewBooks.length === 0 ? (
-              <p className="review-queue-empty">当前没有待审批上传。</p>
+            <div className="review-filter-tabs" data-testid="review-filter-tabs">
+              {[
+                ["pending", "待审批"],
+                ["failed", "解析失败"],
+                ["rejected", "已拒绝"],
+                ["all", "全部"]
+              ].map(([value, label]) => (
+                <button
+                  className={reviewQueueFilter === value ? "active" : ""}
+                  data-testid={`review-filter-${value}`}
+                  key={value}
+                  onClick={() => setReviewQueueFilter(value as ReviewQueueFilter)}
+                  type="button"
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {isLoadingAdminReviews ? (
+              <div className="empty-state">
+                <Loader2 className="spin" size={16} />
+                <span>加载审批列表</span>
+              </div>
+            ) : filteredAdminReviewBooks.length === 0 ? (
+              <p className="review-queue-empty">当前筛选下没有书籍。</p>
             ) : (
               <div className="review-queue-list">
-                {pendingReviewBooks.map((book) => (
+                {pagedAdminReviewBooks.map((book) => (
                   <article
                     className="review-queue-item"
                     data-testid="review-queue-item"
@@ -789,9 +901,45 @@ export function App() {
                       <span>{book.title}</span>
                       <span className={`status ${book.status}`}>{book.status}</span>
                     </button>
+                    <dl className="review-book-meta">
+                      <div>
+                        <dt>上传者</dt>
+                        <dd>{reviewerLabel(book)}</dd>
+                      </div>
+                      <div>
+                        <dt>上传时间</dt>
+                        <dd>{formatDateTime(book.created_at)}</dd>
+                      </div>
+                      <div>
+                        <dt>审核状态</dt>
+                        <dd>{reviewStatusLabel(book.review_status)}</dd>
+                      </div>
+                    </dl>
                     {book.review_note ? (
-                      <p className="review-note-existing">备注：{book.review_note}</p>
+                      <p className="review-note-existing">当前备注：{book.review_note}</p>
                     ) : null}
+                    {book.review_history.length > 0 ? (
+                      <details className="review-history" data-testid="review-history">
+                        <summary>审批历史 {book.review_history.length}</summary>
+                        <ol>
+                          {book.review_history.map((event) => (
+                            <li key={event.id}>
+                              <span>
+                                {formatDateTime(event.created_at)} ·{" "}
+                                {event.reviewer_display_name ?? event.reviewer_username ?? "未知管理员"}
+                              </span>
+                              <strong>
+                                {reviewStatusLabel(event.from_review_status)} →{" "}
+                                {reviewStatusLabel(event.to_review_status)}
+                              </strong>
+                              {event.note ? <em>备注：{event.note}</em> : null}
+                            </li>
+                          ))}
+                        </ol>
+                      </details>
+                    ) : (
+                      <p className="review-history-empty">暂无审批历史。</p>
+                    )}
                     <textarea
                       aria-label={`拒绝《${book.title}》的备注`}
                       data-testid="review-note-input"
@@ -806,29 +954,54 @@ export function App() {
                       value={reviewNotesByBookId[book.id] ?? ""}
                     />
                     <div className="review-queue-actions">
-                      <button
-                        data-testid="review-approve"
-                        disabled={reviewingBookId === book.id}
-                        onClick={() => handleReviewBook(book, "approved")}
-                        type="button"
-                      >
-                        批准发布
-                      </button>
-                      <button
-                        data-testid="review-reject"
-                        disabled={reviewingBookId === book.id}
-                        onClick={() =>
-                          handleReviewBook(book, "rejected", reviewNotesByBookId[book.id])
-                        }
-                        type="button"
-                      >
-                        拒绝
-                      </button>
+                      {book.review_status !== "approved" ? (
+                        <button
+                          data-testid="review-approve"
+                          disabled={reviewingBookId === book.id}
+                          onClick={() => handleReviewBook(book, "approved")}
+                          type="button"
+                        >
+                          批准发布
+                        </button>
+                      ) : null}
+                      {book.review_status !== "rejected" ? (
+                        <button
+                          data-testid="review-reject"
+                          disabled={reviewingBookId === book.id}
+                          onClick={() =>
+                            handleReviewBook(book, "rejected", reviewNotesByBookId[book.id])
+                          }
+                          type="button"
+                        >
+                          拒绝
+                        </button>
+                      ) : null}
                     </div>
                   </article>
                 ))}
               </div>
             )}
+            <div className="review-pagination">
+              <button
+                disabled={reviewQueuePage <= 1}
+                onClick={() => setReviewQueuePage((current) => Math.max(1, current - 1))}
+                type="button"
+              >
+                上一页
+              </button>
+              <span>
+                {reviewQueuePage} / {reviewQueuePageCount}
+              </span>
+              <button
+                disabled={reviewQueuePage >= reviewQueuePageCount}
+                onClick={() =>
+                  setReviewQueuePage((current) => Math.min(reviewQueuePageCount, current + 1))
+                }
+                type="button"
+              >
+                下一页
+              </button>
+            </div>
           </section>
         ) : null}
 

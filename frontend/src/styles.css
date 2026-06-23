@@ -222,6 +222,29 @@ button {
   font-weight: 700;
 }
 
+.review-filter-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.review-filter-tabs button {
+  min-height: 30px;
+  border: 1px solid #dbc99e;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #645333;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.review-filter-tabs button.active {
+  border-color: #8a5b00;
+  background: #8a5b00;
+  color: #ffffff;
+  font-weight: 650;
+}
+
 .review-queue-empty {
   margin: 0;
   color: #647067;
@@ -271,6 +294,74 @@ button {
   line-height: 1.5;
 }
 
+.review-book-meta {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+  margin: 0;
+}
+
+.review-book-meta div {
+  display: grid;
+  grid-template-columns: 58px 1fr;
+  gap: 6px;
+}
+
+.review-book-meta dt {
+  color: #8a7660;
+  font-size: 12px;
+}
+
+.review-book-meta dd {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: #38413b;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.review-history {
+  border: 1px solid #efe2c3;
+  border-radius: 8px;
+  background: #fffdf8;
+  color: #38413b;
+  font-size: 12px;
+  padding: 7px 8px;
+}
+
+.review-history summary {
+  cursor: pointer;
+  font-weight: 650;
+}
+
+.review-history ol {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
+.review-history li span,
+.review-history li strong,
+.review-history li em {
+  display: block;
+  font-style: normal;
+  line-height: 1.5;
+}
+
+.review-history li span {
+  color: #647067;
+}
+
+.review-history-empty {
+  margin: 0;
+  color: #8a7660;
+  font-size: 12px;
+}
+
 .review-queue-item textarea {
   width: 100%;
   min-height: 56px;
@@ -312,6 +403,30 @@ button {
 .review-queue-item textarea:disabled {
   cursor: not-allowed;
   opacity: 0.65;
+}
+
+.review-pagination {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 8px;
+  color: #647067;
+  font-size: 12px;
+}
+
+.review-pagination button {
+  min-height: 30px;
+  border: 1px solid #dbc99e;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #645333;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.review-pagination button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .book-list {

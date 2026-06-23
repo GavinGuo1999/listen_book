@@ -1,4 +1,5 @@
 import type {
+  AdminBookReviewSummary,
   AudioAsset,
   AudioPrefetchResponse,
   AuthResponse,
@@ -84,6 +85,14 @@ export async function fetchBooks(): Promise<BookSummary[]> {
   const response = await apiFetch("/api/books");
   if (!response.ok) {
     throw new Error("Failed to load books");
+  }
+  return response.json();
+}
+
+export async function fetchAdminBookReviews(): Promise<AdminBookReviewSummary[]> {
+  const response = await apiFetch("/api/books/admin/reviews");
+  if (!response.ok) {
+    throw new Error(await readError(response, "Failed to load admin review books"));
   }
   return response.json();
 }

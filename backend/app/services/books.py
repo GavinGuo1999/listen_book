@@ -5,11 +5,19 @@ from uuid import UUID, uuid4
 
 from fastapi import HTTPException, UploadFile, status
 from sqlalchemy import or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import settings
 from app.models.audio import AudioAsset
-from app.models.book import Book, BookFile, BookReviewStatus, Chapter, Paragraph, Sentence
+from app.models.book import (
+    Book,
+    BookFile,
+    BookReviewEvent,
+    BookReviewStatus,
+    Chapter,
+    Paragraph,
+    Sentence,
+)
 from app.models.job import Job, JobStatus, JobType
 from app.models.progress import ReadingProgress
 from app.models.user import User
@@ -27,6 +35,18 @@ def list_visible_books(db: Session, user: User) -> list[Book]:
                 Book.uploader_id == user.id,
             )
         )
+    return list(db.scalars(stmt).all())
+
+
+def list_admin_review_books(db: Session) -> list[Book]:
+    stmt = (
+        select(Book)
+        .options(
+            selectinload(Book.uploader),
+            selectinload(Book.review_events).selectinload(BookReviewEvent.reviewer),
+        )
+        .order_by(Book.created_at.desc())
+    )
     return list(db.scalars(stmt).all())
 
 
@@ -90,6 +110,7 @@ def review_book(
     db: Session,
     book_id: UUID,
     *,
+    reviewer: User,
     review_status: str,
     review_note: str | None = None,
 ) -> Book:
@@ -97,8 +118,19 @@ def review_book(
     if book is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Book not found")
 
+    previous_review_status = book.review_status
+    cleaned_note = review_note.strip() if review_note and review_note.strip() else None
     book.review_status = review_status
-    book.review_note = review_note.strip() if review_note and review_note.strip() else None
+    book.review_note = cleaned_note
+    db.add(
+        BookReviewEvent(
+            book_id=book.id,
+            reviewer_id=reviewer.id,
+            from_review_status=previous_review_status,
+            to_review_status=review_status,
+            note=cleaned_note,
+        )
+    )
     db.commit()
     db.refresh(book)
     return book

@@ -9,6 +9,23 @@ export type BookSummary = {
   created_at: string;
 };
 
+export type BookReviewEvent = {
+  id: string;
+  reviewer_id: string | null;
+  reviewer_username: string | null;
+  reviewer_display_name: string | null;
+  from_review_status: string;
+  to_review_status: string;
+  note: string | null;
+  created_at: string;
+};
+
+export type AdminBookReviewSummary = BookSummary & {
+  uploader_username: string | null;
+  uploader_display_name: string | null;
+  review_history: BookReviewEvent[];
+};
+
 export type Sentence = {
   id: string;
   sentence_index: number;

@@ -45,6 +45,24 @@ class Book(IdMixin, TimestampMixin, Base):
     uploader = relationship("User", back_populates="uploaded_books")
     files = relationship("BookFile", back_populates="book", cascade="all, delete-orphan")
     chapters = relationship("Chapter", back_populates="book", cascade="all, delete-orphan")
+    review_events = relationship(
+        "BookReviewEvent",
+        back_populates="book",
+        cascade="all, delete-orphan",
+        order_by=lambda: BookReviewEvent.created_at.desc(),
+    )
+
+    @property
+    def uploader_username(self) -> str | None:
+        return self.uploader.username if self.uploader else None
+
+    @property
+    def uploader_display_name(self) -> str | None:
+        return self.uploader.display_name if self.uploader else None
+
+    @property
+    def review_history(self) -> list["BookReviewEvent"]:
+        return list(self.review_events)
 
 
 class BookFile(IdMixin, TimestampMixin, Base):
@@ -57,6 +75,35 @@ class BookFile(IdMixin, TimestampMixin, Base):
     size_bytes: Mapped[int] = mapped_column(Integer)
 
     book = relationship("Book", back_populates="files")
+
+
+class BookReviewEvent(IdMixin, TimestampMixin, Base):
+    __tablename__ = "book_review_events"
+
+    book_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("books.id"),
+        index=True,
+    )
+    reviewer_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id"),
+        index=True,
+    )
+    from_review_status: Mapped[str] = mapped_column(String(32))
+    to_review_status: Mapped[str] = mapped_column(String(32), index=True)
+    note: Mapped[str | None] = mapped_column(Text)
+
+    book = relationship("Book", back_populates="review_events")
+    reviewer = relationship("User")
+
+    @property
+    def reviewer_username(self) -> str | None:
+        return self.reviewer.username if self.reviewer else None
+
+    @property
+    def reviewer_display_name(self) -> str | None:
+        return self.reviewer.display_name if self.reviewer else None
 
 
 class Chapter(IdMixin, TimestampMixin, Base):

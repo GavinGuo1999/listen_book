@@ -204,8 +204,18 @@ test.describe("Listen Book browser flow", () => {
         hasText: title,
       });
       await expect(reviewItem).toBeVisible();
+      await expect(reviewItem).toContainText(`@${uploader.username}`);
       await reviewItem.locator("[data-testid='review-approve']").click();
       await expect(reviewItem).toHaveCount(0, { timeout: 10_000 });
+      await reviewQueue.locator("[data-testid='review-filter-all']").click();
+      const reviewedItem = reviewQueue.locator("[data-testid='review-queue-item']").filter({
+        hasText: title,
+      });
+      await expect(reviewedItem).toBeVisible();
+      await reviewedItem.locator("[data-testid='review-history']").click();
+      await expect(reviewedItem.locator("[data-testid='review-history']")).toContainText(
+        "待审批 → 已发布"
+      );
 
       await loginViaUi(page, otherReader);
       await expect(bookRow(page, title)).toBeVisible({ timeout: 10_000 });

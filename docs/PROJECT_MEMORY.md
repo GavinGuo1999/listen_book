@@ -86,6 +86,8 @@ Get-Content -Path docs\PROJECT_MEMORY.md -Encoding UTF8
   - 管理员上传自动发布，普通用户上传默认待审批
   - 管理员可通过独立待审批列表、前端书行按钮或 `PATCH /api/books/{book_id}/review` 批准/拒绝
   - 拒绝时可填写 `review_note` 审批备注
+  - 管理员审核中心可查看待审批/解析失败/已拒绝/全部筛选、分页、上传者、上传时间和审批历史
+  - 审批历史写入 `book_review_events`：审批人、审批时间、原状态、新状态、历史备注
   - 普通用户只能看到已发布书籍和自己上传的待审/拒绝书籍
   - 章节、进度、音频接口都会检查书籍可见性，避免绕过审批读取正文
   - 第一个正式注册用户自动成为管理员；默认本地用户 `local` 仍是管理员
@@ -101,7 +103,7 @@ Get-Content -Path docs\PROJECT_MEMORY.md -Encoding UTF8
 
 当前主要未完成：
 
-- 更完整的管理员后台体验：审批审计记录、筛选/分页等
+- 更完整的管理员后台体验：批量审批、复杂筛选、后台权限分层等
 - PDF 解析暂不做；当前上传格式明确收敛为 TXT/EPUB
 - 更自然的小说朗读：真正的多角色音色分配、按章节/角色学习风格
 
@@ -147,8 +149,37 @@ Get-Content -Path docs\PROJECT_MEMORY.md -Encoding UTF8
 下次优先任务：
 
 1. 如需实机确认，运行 `scripts\stop-dev.bat` 和 `scripts\start-dev.bat` 后打开页面复核管理员待审批列表。
-2. 可继续做审批审计记录/分页筛选。
+2. 可继续做批量审批、复杂筛选或后台权限分层。
 3. 或继续推进真正的多角色小说朗读。
+
+## 最近交接记录补充：2026-06-23 审批后台增强
+
+本轮继续完成：
+
+- 新增审批审计记录：
+  - 新表 `book_review_events`
+  - 新迁移 `backend/alembic/versions/20260623_0003_book_review_events.py`
+  - 每次管理员审批都会记录审批人、审批时间、原状态、新状态、备注
+- 新增管理员审计接口：
+  - `GET /api/books/admin/reviews`
+  - 仅管理员可用
+  - 返回上传者信息和 `review_history`
+- 增强前端管理员审核中心：
+  - 待审批、解析失败、已拒绝、全部筛选
+  - 客户端分页
+  - 展示上传者、上传时间、审核状态
+  - 展示当前备注和审批历史
+- 测试增强：
+  - 后端测试覆盖审计接口、非管理员 403、审批事件字段
+  - E2E 覆盖审核中心中上传者展示、审批后历史展示
+
+本轮验证：
+
+- 已执行本机数据库迁移：`20260622_0002 -> 20260623_0003`
+- `.venv\Scripts\python.exe -m pytest backend\tests -q` 通过，当前为 `21 passed`
+- `.venv\Scripts\ruff.exe check --no-cache backend\app backend\tests scripts\smoke_api.py` 通过
+- `cd frontend && npm run build` 通过
+- `cd frontend && npm run test:e2e` 通过，当前为 `4 passed`
 
 ## 最近交接记录：2026-06-22
 
