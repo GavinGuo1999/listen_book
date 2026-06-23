@@ -13,4 +13,5 @@ class User(IdMixin, TimestampMixin, Base):
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
+    uploaded_books = relationship("Book", back_populates="uploader")
     progress_items = relationship("ReadingProgress", back_populates="user")

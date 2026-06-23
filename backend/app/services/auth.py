@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.user import User
+from app.services.progress import DEFAULT_USERNAME
 
 pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 TOKEN_TTL = timedelta(days=30)
@@ -41,11 +42,14 @@ def create_user(
     if existing is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Username already exists")
 
+    first_registered_user = (
+        db.scalar(select(User.id).where(User.username != DEFAULT_USERNAME).limit(1)) is None
+    )
     user = User(
         username=normalized_username,
         display_name=display_name.strip() if display_name and display_name.strip() else username,
         password_hash=hash_password(password),
-        is_admin=False,
+        is_admin=first_registered_user,
         is_active=True,
     )
     db.add(user)

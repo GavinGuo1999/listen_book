@@ -7,7 +7,15 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.audio import AudioAsset, AudioStatus
-from app.models.book import Book, BookFile, BookStatus, Chapter, Paragraph, Sentence
+from app.models.book import (
+    Book,
+    BookFile,
+    BookReviewStatus,
+    BookStatus,
+    Chapter,
+    Paragraph,
+    Sentence,
+)
 from app.models.job import Job
 from app.models.progress import ReadingProgress
 from app.services.progress import get_or_create_default_user
@@ -28,6 +36,7 @@ def test_upload_txt_parses_book_to_ready(client: TestClient) -> None:
     [book] = books_response.json()
     assert book["id"] == book_id
     assert book["status"] == BookStatus.READY.value
+    assert book["review_status"] == BookReviewStatus.APPROVED.value
 
     chapters_response = client.get(f"/api/books/{book_id}/chapters")
     assert chapters_response.status_code == 200
@@ -101,6 +110,78 @@ def test_upload_invalid_epub_marks_book_failed(client: TestClient) -> None:
     [book] = books_response.json()
     assert book["id"] == book_id
     assert book["status"] == BookStatus.FAILED.value
+
+
+def test_user_upload_waits_for_admin_approval_before_public_visibility(
+    client: TestClient,
+) -> None:
+    admin_token = register_user(client, "admin")
+    uploader_token = register_user(client, "uploader")
+    other_token = register_user(client, "other-reader")
+
+    upload_response = client.post(
+        "/api/books",
+        headers={"Authorization": f"Bearer {uploader_token}"},
+        files={"file": ("pending.txt", "第一句。第二句。".encode(), "text/plain")},
+    )
+
+    assert upload_response.status_code == 201
+    uploaded_book = upload_response.json()
+    book_id = uploaded_book["id"]
+    assert uploaded_book["status"] == BookStatus.UPLOADED.value
+    assert uploaded_book["review_status"] == BookReviewStatus.PENDING.value
+
+    uploader_books_response = client.get(
+        "/api/books",
+        headers={"Authorization": f"Bearer {uploader_token}"},
+    )
+    other_books_response = client.get(
+        "/api/books",
+        headers={"Authorization": f"Bearer {other_token}"},
+    )
+    assert uploader_books_response.status_code == 200
+    assert [book["id"] for book in uploader_books_response.json()] == [book_id]
+    assert uploader_books_response.json()[0]["status"] == BookStatus.READY.value
+    assert other_books_response.status_code == 200
+    assert book_id not in [book["id"] for book in other_books_response.json()]
+
+    other_chapters_response = client.get(
+        f"/api/books/{book_id}/chapters",
+        headers={"Authorization": f"Bearer {other_token}"},
+    )
+    uploader_chapters_response = client.get(
+        f"/api/books/{book_id}/chapters",
+        headers={"Authorization": f"Bearer {uploader_token}"},
+    )
+    assert other_chapters_response.status_code == 404
+    assert uploader_chapters_response.status_code == 200
+
+    forbidden_review_response = client.patch(
+        f"/api/books/{book_id}/review",
+        headers={"Authorization": f"Bearer {uploader_token}"},
+        json={"review_status": BookReviewStatus.APPROVED.value},
+    )
+    assert forbidden_review_response.status_code == 403
+
+    approved_response = client.patch(
+        f"/api/books/{book_id}/review",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        json={"review_status": BookReviewStatus.APPROVED.value},
+    )
+    assert approved_response.status_code == 200
+    assert approved_response.json()["review_status"] == BookReviewStatus.APPROVED.value
+
+    public_books_response = client.get(
+        "/api/books",
+        headers={"Authorization": f"Bearer {other_token}"},
+    )
+    public_chapters_response = client.get(
+        f"/api/books/{book_id}/chapters",
+        headers={"Authorization": f"Bearer {other_token}"},
+    )
+    assert public_books_response.status_code == 200
+    assert book_id in [book["id"] for book in public_books_response.json()]
+    assert public_chapters_response.status_code == 200
 
 
 def test_progress_api_saves_reads_and_validates_sentence(
@@ -236,6 +317,15 @@ def create_ready_book(db_session: Session, title: str = "Sample") -> tuple[Book,
     db_session.refresh(book)
     db_session.refresh(sentence)
     return book, sentence
+
+
+def register_user(client: TestClient, username: str) -> str:
+    response = client.post(
+        "/api/auth/register",
+        json={"username": username, "password": "secret123"},
+    )
+    assert response.status_code == 201
+    return response.json()["access_token"]
 
 
 def create_minimal_epub(path) -> None:

@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class BookSummary(BaseModel):
@@ -9,9 +9,17 @@ class BookSummary(BaseModel):
     title: str
     author: str | None
     status: str
+    review_status: str
+    review_note: str | None = None
+    uploader_id: UUID | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class BookReviewUpdate(BaseModel):
+    review_status: str = Field(pattern="^(approved|rejected|pending_review)$")
+    review_note: str | None = None
 
 
 class SentenceRead(BaseModel):

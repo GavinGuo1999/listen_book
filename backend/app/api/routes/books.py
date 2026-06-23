@@ -2,27 +2,35 @@ import logging
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_admin_user, get_current_user
 from app.db.session import get_db
 from app.models.book import Book, Chapter, Paragraph
 from app.models.user import User
 from app.schemas.book import (
+    BookReviewUpdate,
     BookSummary,
     ChapterRead,
     ReadingProgressRead,
     ReadingProgressUpdate,
 )
-from app.services.books import create_uploaded_book, delete_book
+from app.services.books import (
+    create_uploaded_book,
+    delete_book,
+    ensure_book_accessible,
+    list_visible_books,
+    review_book,
+)
 from app.services.progress import get_book_progress, save_book_progress
 from app.workers.parse_books import run_once
 
 router = APIRouter()
 DbSession = Annotated[Session, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_user)]
+AdminUser = Annotated[User, Depends(get_current_admin_user)]
 BookUpload = Annotated[UploadFile, File(...)]
 logger = logging.getLogger(__name__)
 
@@ -36,22 +44,41 @@ def run_pending_parse_job() -> None:
 
 
 @router.get("", response_model=list[BookSummary])
-def list_books(db: DbSession) -> list[Book]:
-    return list(db.scalars(select(Book).order_by(Book.created_at.desc())).all())
+def list_books(db: DbSession, current_user: CurrentUser) -> list[Book]:
+    return list_visible_books(db, current_user)
 
 
 @router.post("", response_model=BookSummary, status_code=status.HTTP_201_CREATED)
-def upload_book(file: BookUpload, db: DbSession, background_tasks: BackgroundTasks) -> Book:
-    book = create_uploaded_book(db, file)
+def upload_book(
+    file: BookUpload,
+    db: DbSession,
+    current_user: CurrentUser,
+    background_tasks: BackgroundTasks,
+) -> Book:
+    book = create_uploaded_book(db, file, current_user)
     background_tasks.add_task(run_pending_parse_job)
     return book
 
 
+@router.patch("/{book_id}/review", response_model=BookSummary)
+def update_book_review(
+    book_id: UUID,
+    payload: BookReviewUpdate,
+    db: DbSession,
+    admin_user: AdminUser,
+) -> Book:
+    del admin_user
+    return review_book(
+        db,
+        book_id,
+        review_status=payload.review_status,
+        review_note=payload.review_note,
+    )
+
+
 @router.get("/{book_id}/chapters", response_model=list[ChapterRead])
-def list_chapters(book_id: UUID, db: DbSession) -> list[Chapter]:
-    book = db.get(Book, book_id)
-    if book is None:
-        raise HTTPException(status_code=404, detail="Book not found")
+def list_chapters(book_id: UUID, db: DbSession, current_user: CurrentUser) -> list[Chapter]:
+    ensure_book_accessible(db, book_id, current_user)
 
     stmt = (
         select(Chapter)
@@ -88,5 +115,5 @@ def update_book_progress(
 
 
 @router.delete("/{book_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_existing_book(book_id: UUID, db: DbSession) -> None:
-    delete_book(db, book_id)
+def delete_existing_book(book_id: UUID, db: DbSession, current_user: CurrentUser) -> None:
+    delete_book(db, book_id, current_user)

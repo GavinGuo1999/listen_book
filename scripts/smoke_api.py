@@ -18,7 +18,7 @@ def main() -> int:
     title = f"codex-smoke-{int(time.time())}"
     book_id: str | None = None
 
-    with httpx.Client(base_url=base_url, timeout=10.0) as client:
+    with httpx.Client(base_url=base_url, timeout=10.0, trust_env=False) as client:
         health = client.get("/api/health")
         health.raise_for_status()
 
@@ -90,4 +90,3 @@ if __name__ == "__main__":
     except Exception as exc:
         print(f"smoke failed: {exc}", file=sys.stderr)
         raise
-

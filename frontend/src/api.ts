@@ -111,6 +111,27 @@ export async function deleteBook(bookId: string): Promise<void> {
   }
 }
 
+export async function reviewBook(
+  bookId: string,
+  reviewStatus: "approved" | "rejected" | "pending_review",
+  reviewNote?: string
+): Promise<BookSummary> {
+  const response = await apiFetch(`/api/books/${bookId}/review`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      review_status: reviewStatus,
+      review_note: reviewNote || null
+    })
+  });
+  if (!response.ok) {
+    throw new Error(await readError(response, "Failed to review book"));
+  }
+  return response.json();
+}
+
 export async function fetchChapters(bookId: string): Promise<Chapter[]> {
   const response = await apiFetch(`/api/books/${bookId}/chapters`);
   if (!response.ok) {

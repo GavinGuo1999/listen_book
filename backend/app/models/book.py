@@ -15,6 +15,12 @@ class BookStatus(StrEnum):
     FAILED = "failed"
 
 
+class BookReviewStatus(StrEnum):
+    PENDING = "pending_review"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
 class Book(IdMixin, TimestampMixin, Base):
     __tablename__ = "books"
 
@@ -24,7 +30,19 @@ class Book(IdMixin, TimestampMixin, Base):
     cover_path: Mapped[str | None] = mapped_column(String(500))
     status: Mapped[str] = mapped_column(String(32), default=BookStatus.UPLOADED.value, index=True)
     error_message: Mapped[str | None] = mapped_column(Text)
+    uploader_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id"),
+        index=True,
+    )
+    review_status: Mapped[str] = mapped_column(
+        String(32),
+        default=BookReviewStatus.APPROVED.value,
+        index=True,
+    )
+    review_note: Mapped[str | None] = mapped_column(Text)
 
+    uploader = relationship("User", back_populates="uploaded_books")
     files = relationship("BookFile", back_populates="book", cascade="all, delete-orphan")
     chapters = relationship("Chapter", back_populates="book", cascade="all, delete-orphan")
 

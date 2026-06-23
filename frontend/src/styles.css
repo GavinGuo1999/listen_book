@@ -180,6 +180,140 @@ button {
   display: none;
 }
 
+.upload-hint {
+  margin: -10px 0 0;
+  color: #647067;
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.review-queue-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid #e6dac2;
+  border-radius: 10px;
+  background: #fffaf0;
+  padding: 12px;
+}
+
+.review-queue-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.review-queue-header h2 {
+  margin: 2px 0 0;
+  font-size: 16px;
+}
+
+.review-queue-header > span {
+  display: grid;
+  place-items: center;
+  min-width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: #8a5b00;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.review-queue-empty {
+  margin: 0;
+  color: #647067;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.review-queue-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.review-queue-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid #eedcb8;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 10px;
+}
+
+.review-queue-title {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  background: transparent;
+  color: #202124;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+}
+
+.review-queue-title > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.review-note-existing {
+  margin: 0;
+  color: #8a5b00;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.review-queue-item textarea {
+  width: 100%;
+  min-height: 56px;
+  resize: vertical;
+  border: 1px solid #d9c99e;
+  border-radius: 8px;
+  background: #fffdf8;
+  color: #202124;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 8px;
+}
+
+.review-queue-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.review-queue-actions button {
+  min-height: 32px;
+  border: 1px solid #cbd8d6;
+  border-radius: 8px;
+  background: #f5faf9;
+  color: #196b69;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.review-queue-actions button:last-child {
+  border-color: #e3b0a5;
+  background: #fff3f0;
+  color: #9b2525;
+}
+
+.review-queue-actions button:disabled,
+.review-queue-item textarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
 .book-list {
   display: flex;
   flex: 1;
@@ -190,7 +324,7 @@ button {
 
 .book-row {
   display: grid;
-  grid-template-columns: 1fr 36px;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   min-height: 48px;
   border: 1px solid #e1e4df;
@@ -224,6 +358,40 @@ button {
   cursor: pointer;
   padding: 10px 12px;
   text-align: left;
+}
+
+.book-badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.book-review-actions {
+  display: flex;
+  gap: 4px;
+  padding-right: 4px;
+}
+
+.book-review-actions button {
+  min-height: 28px;
+  border: 1px solid #cbd8d6;
+  border-radius: 999px;
+  background: #f5faf9;
+  color: #196b69;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 650;
+  padding: 3px 8px;
+}
+
+.book-review-actions button:hover:not(:disabled) {
+  background: #e1f0ed;
+}
+
+.book-review-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
 }
 
 .book-delete-button {
@@ -263,6 +431,22 @@ button {
 }
 
 .status.failed {
+  background: #f8dddd;
+  color: #9b2525;
+}
+
+.review-status {
+  border-radius: 999px;
+  font-size: 12px;
+  padding: 3px 8px;
+}
+
+.review-status.pending_review {
+  background: #fff4d6;
+  color: #8a5b00;
+}
+
+.review-status.rejected {
   background: #f8dddd;
   color: #9b2525;
 }

@@ -4,20 +4,33 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 from fastapi import HTTPException, UploadFile, status
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.audio import AudioAsset
-from app.models.book import Book, BookFile, Chapter, Paragraph, Sentence
+from app.models.book import Book, BookFile, BookReviewStatus, Chapter, Paragraph, Sentence
 from app.models.job import Job, JobStatus, JobType
 from app.models.progress import ReadingProgress
+from app.models.user import User
 
-SUPPORTED_FORMATS = {"txt", "epub", "pdf"}
+SUPPORTED_FORMATS = {"txt", "epub"}
 logger = logging.getLogger(__name__)
 
 
-def create_uploaded_book(db: Session, file: UploadFile) -> Book:
+def list_visible_books(db: Session, user: User) -> list[Book]:
+    stmt = select(Book).order_by(Book.created_at.desc())
+    if not user.is_admin:
+        stmt = stmt.where(
+            or_(
+                Book.review_status == BookReviewStatus.APPROVED.value,
+                Book.uploader_id == user.id,
+            )
+        )
+    return list(db.scalars(stmt).all())
+
+
+def create_uploaded_book(db: Session, file: UploadFile, uploader: User) -> Book:
     original_name = file.filename or "untitled"
     extension = Path(original_name).suffix.lower().lstrip(".")
     if extension not in SUPPORTED_FORMATS:
@@ -36,7 +49,15 @@ def create_uploaded_book(db: Session, file: UploadFile) -> Book:
     size_bytes = storage_path.stat().st_size
     title = Path(original_name).stem
 
-    book = Book(title=title)
+    book = Book(
+        title=title,
+        uploader_id=uploader.id,
+        review_status=(
+            BookReviewStatus.APPROVED.value
+            if uploader.is_admin
+            else BookReviewStatus.PENDING.value
+        ),
+    )
     db.add(book)
     db.flush()
 
@@ -65,10 +86,71 @@ def create_uploaded_book(db: Session, file: UploadFile) -> Book:
     return book
 
 
-def delete_book(db: Session, book_id: UUID) -> None:
+def review_book(
+    db: Session,
+    book_id: UUID,
+    *,
+    review_status: str,
+    review_note: str | None = None,
+) -> Book:
     book = db.get(Book, book_id)
     if book is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Book not found")
+
+    book.review_status = review_status
+    book.review_note = review_note.strip() if review_note and review_note.strip() else None
+    db.commit()
+    db.refresh(book)
+    return book
+
+
+def ensure_book_accessible(db: Session, book_id: UUID, user: User) -> Book:
+    book = db.get(Book, book_id)
+    if book is None or not can_access_book(book, user):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Book not found")
+    return book
+
+
+def can_access_book(book: Book, user: User) -> bool:
+    return (
+        book.review_status == BookReviewStatus.APPROVED.value
+        or user.is_admin
+        or book.uploader_id == user.id
+    )
+
+
+def ensure_sentence_accessible(db: Session, sentence_id: UUID, user: User) -> Sentence:
+    row = db.execute(
+        select(Sentence, Book)
+        .join(Paragraph, Sentence.paragraph_id == Paragraph.id)
+        .join(Chapter, Paragraph.chapter_id == Chapter.id)
+        .join(Book, Chapter.book_id == Book.id)
+        .where(Sentence.id == sentence_id)
+    ).one_or_none()
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Sentence not found: {sentence_id}",
+        )
+
+    sentence, book = row
+    if not can_access_book(book, user):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Sentence not found: {sentence_id}",
+        )
+    return sentence
+
+
+def delete_book(db: Session, book_id: UUID, user: User) -> None:
+    book = db.get(Book, book_id)
+    if book is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Book not found")
+    if not can_delete_book(book, user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin permission required",
+        )
 
     file_paths = _collect_book_storage_paths(db, book)
 
@@ -101,6 +183,12 @@ def delete_book(db: Session, book_id: UUID) -> None:
 
     for file_path in file_paths:
         _delete_storage_file(file_path)
+
+
+def can_delete_book(book: Book, user: User) -> bool:
+    if user.is_admin:
+        return True
+    return book.uploader_id == user.id and book.review_status != BookReviewStatus.APPROVED.value
 
 
 def _collect_book_storage_paths(db: Session, book: Book) -> list[Path]:

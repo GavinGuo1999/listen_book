@@ -4,9 +4,10 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.book import Book, Chapter, Paragraph, Sentence
+from app.models.book import Chapter, Paragraph, Sentence
 from app.models.progress import ReadingProgress
 from app.models.user import User
+from app.services.books import ensure_book_accessible
 
 DEFAULT_USERNAME = "local"
 
@@ -34,8 +35,8 @@ def get_book_progress(
     book_id: UUID,
     user: User | None = None,
 ) -> ReadingProgress | None:
-    _ensure_book_exists(db, book_id)
     user = user or get_or_create_default_user(db)
+    ensure_book_accessible(db, book_id, user)
     return db.scalar(
         select(ReadingProgress).where(
             ReadingProgress.user_id == user.id,
@@ -51,8 +52,8 @@ def save_book_progress(
     audio_position_ms: int = 0,
     user: User | None = None,
 ) -> ReadingProgress:
-    _ensure_book_exists(db, book_id)
     user = user or get_or_create_default_user(db)
+    ensure_book_accessible(db, book_id, user)
 
     chapter_id: UUID | None = None
     paragraph_id: UUID | None = None
@@ -80,11 +81,6 @@ def save_book_progress(
     db.commit()
     db.refresh(progress)
     return progress
-
-
-def _ensure_book_exists(db: Session, book_id: UUID) -> None:
-    if db.get(Book, book_id) is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Book not found")
 
 
 def _resolve_sentence_location(db: Session, book_id: UUID, sentence_id: UUID) -> tuple[UUID, UUID]:

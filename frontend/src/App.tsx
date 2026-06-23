@@ -25,6 +25,7 @@ import {
   loginUser,
   prefetchSentenceAudio,
   registerUser,
+  reviewBook as reviewBookRequest,
   saveBookProgress,
   setStoredAuthToken,
   uploadBook
@@ -56,6 +57,8 @@ export function App() {
   const [isLoadingChapters, setIsLoadingChapters] = useState(false);
   const [activePrefetchChapterId, setActivePrefetchChapterId] = useState<string | null>(null);
   const [deletingBookId, setDeletingBookId] = useState<string | null>(null);
+  const [reviewingBookId, setReviewingBookId] = useState<string | null>(null);
+  const [reviewNotesByBookId, setReviewNotesByBookId] = useState<Record<string, string>>({});
   const [bookPendingDelete, setBookPendingDelete] = useState<BookSummary | null>(null);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [authMode, setAuthMode] = useState<AuthMode>("login");
@@ -76,6 +79,7 @@ export function App() {
   const audioPreloadRef = useRef<Map<string, HTMLAudioElement>>(new Map());
   const prefetchingSentenceIdsRef = useRef<Set<string>>(new Set());
   const restoredPlaybackPositionRef = useRef<RestoredPlaybackPosition | null>(null);
+  const isAuthSubmittingRef = useRef(false);
 
   useEffect(() => {
     loadCurrentUser();
@@ -113,6 +117,10 @@ export function App() {
 
   async function handleAuthSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isAuthSubmittingRef.current) {
+      return;
+    }
+    isAuthSubmittingRef.current = true;
     setAuthError(null);
     setIsAuthSubmitting(true);
     try {
@@ -124,11 +132,13 @@ export function App() {
       setCurrentUser(response.user);
       setAuthPassword("");
       setAuthDisplayName("");
+      setAuthMode("login");
       clearCurrentBookState();
       await refreshBooks();
     } catch (err) {
       setAuthError(err instanceof Error ? err.message : "账号操作失败");
     } finally {
+      isAuthSubmittingRef.current = false;
       setIsAuthSubmitting(false);
     }
   }
@@ -136,6 +146,7 @@ export function App() {
   async function logout() {
     setStoredAuthToken(null);
     setAuthError(null);
+    setAuthMode("login");
     clearCurrentBookState();
     await loadCurrentUser();
     await refreshBooks();
@@ -260,6 +271,29 @@ export function App() {
     }
   }
 
+  async function handleReviewBook(
+    book: BookSummary,
+    reviewStatus: "approved" | "rejected" | "pending_review",
+    reviewNote?: string
+  ) {
+    setReviewingBookId(book.id);
+    setError(null);
+    try {
+      const updatedBook = await reviewBookRequest(book.id, reviewStatus, reviewNote);
+      setBooks((current) => current.map((item) => (item.id === book.id ? updatedBook : item)));
+      setReviewNotesByBookId((current) => {
+        const next = { ...current };
+        delete next[book.id];
+        return next;
+      });
+      await refreshBooks(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "审批失败");
+    } finally {
+      setReviewingBookId(null);
+    }
+  }
+
   async function handleUpload(file: File | undefined) {
     if (!file) {
       return;
@@ -289,6 +323,31 @@ export function App() {
     () => books.find((book) => book.id === selectedBookId) ?? null,
     [books, selectedBookId]
   );
+
+  const pendingReviewBooks = useMemo(
+    () => books.filter((book) => book.review_status === "pending_review"),
+    [books]
+  );
+
+  function reviewStatusLabel(status: string) {
+    if (status === "pending_review") {
+      return "待审批";
+    }
+    if (status === "rejected") {
+      return "已拒绝";
+    }
+    return "已发布";
+  }
+
+  function canDeleteBook(book: BookSummary) {
+    if (currentUser === null) {
+      return true;
+    }
+    return (
+      currentUser.is_admin ||
+      (book.uploader_id === currentUser.id && book.review_status !== "approved")
+    );
+  }
 
   useEffect(() => {
     if (!selectedBook || !PROCESSING_STATUSES.has(selectedBook.status)) {
@@ -623,7 +682,13 @@ export function App() {
               </small>
             </div>
             {getStoredAuthToken() ? (
-              <button aria-label="退出登录" onClick={logout} title="退出登录" type="button">
+              <button
+                aria-label="退出登录"
+                data-testid="auth-logout"
+                onClick={logout}
+                title="退出登录"
+                type="button"
+              >
                 <LogOut size={15} />
               </button>
             ) : null}
@@ -634,6 +699,7 @@ export function App() {
               <div className="auth-tabs">
                 <button
                   className={authMode === "login" ? "active" : ""}
+                  data-testid="auth-login-tab"
                   onClick={() => setAuthMode("login")}
                   type="button"
                 >
@@ -641,6 +707,7 @@ export function App() {
                 </button>
                 <button
                   className={authMode === "register" ? "active" : ""}
+                  data-testid="auth-register-tab"
                   onClick={() => setAuthMode("register")}
                   type="button"
                 >
@@ -649,6 +716,7 @@ export function App() {
               </div>
               <input
                 autoComplete="username"
+                data-testid="auth-username"
                 onChange={(event) => setAuthUsername(event.target.value)}
                 placeholder="用户名"
                 required
@@ -657,6 +725,7 @@ export function App() {
               />
               {authMode === "register" ? (
                 <input
+                  data-testid="auth-display-name"
                   onChange={(event) => setAuthDisplayName(event.target.value)}
                   placeholder="显示名（可选）"
                   type="text"
@@ -665,6 +734,7 @@ export function App() {
               ) : null}
               <input
                 autoComplete={authMode === "login" ? "current-password" : "new-password"}
+                data-testid="auth-password"
                 minLength={6}
                 onChange={(event) => setAuthPassword(event.target.value)}
                 placeholder="密码"
@@ -673,7 +743,7 @@ export function App() {
                 value={authPassword}
               />
               {authError ? <p className="auth-error">{authError}</p> : null}
-              <button disabled={isAuthSubmitting} type="submit">
+              <button data-testid="auth-submit" disabled={isAuthSubmitting} type="submit">
                 {isAuthSubmitting ? <Loader2 className="spin" size={14} /> : null}
                 {authMode === "login" ? "登录账号" : "创建账号"}
               </button>
@@ -685,11 +755,82 @@ export function App() {
           <Upload size={18} />
           <span>上传书籍</span>
           <input
-            accept=".txt,.epub,.pdf"
+            accept=".txt,.epub"
             type="file"
             onChange={(event) => handleUpload(event.target.files?.[0])}
           />
         </label>
+        <p className="upload-hint">当前支持 TXT / EPUB；PDF 暂不接入。</p>
+
+        {currentUser?.is_admin ? (
+          <section className="review-queue-card" data-testid="admin-review-queue">
+            <div className="review-queue-header">
+              <div>
+                <p className="eyebrow">管理员</p>
+                <h2>待审批书籍</h2>
+              </div>
+              <span>{pendingReviewBooks.length}</span>
+            </div>
+            {pendingReviewBooks.length === 0 ? (
+              <p className="review-queue-empty">当前没有待审批上传。</p>
+            ) : (
+              <div className="review-queue-list">
+                {pendingReviewBooks.map((book) => (
+                  <article
+                    className="review-queue-item"
+                    data-testid="review-queue-item"
+                    key={book.id}
+                  >
+                    <button
+                      className="review-queue-title"
+                      onClick={() => selectBook(book)}
+                      type="button"
+                    >
+                      <span>{book.title}</span>
+                      <span className={`status ${book.status}`}>{book.status}</span>
+                    </button>
+                    {book.review_note ? (
+                      <p className="review-note-existing">备注：{book.review_note}</p>
+                    ) : null}
+                    <textarea
+                      aria-label={`拒绝《${book.title}》的备注`}
+                      data-testid="review-note-input"
+                      disabled={reviewingBookId === book.id}
+                      onChange={(event) =>
+                        setReviewNotesByBookId((current) => ({
+                          ...current,
+                          [book.id]: event.target.value
+                        }))
+                      }
+                      placeholder="拒绝备注（可选）"
+                      value={reviewNotesByBookId[book.id] ?? ""}
+                    />
+                    <div className="review-queue-actions">
+                      <button
+                        data-testid="review-approve"
+                        disabled={reviewingBookId === book.id}
+                        onClick={() => handleReviewBook(book, "approved")}
+                        type="button"
+                      >
+                        批准发布
+                      </button>
+                      <button
+                        data-testid="review-reject"
+                        disabled={reviewingBookId === book.id}
+                        onClick={() =>
+                          handleReviewBook(book, "rejected", reviewNotesByBookId[book.id])
+                        }
+                        type="button"
+                      >
+                        拒绝
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+        ) : null}
 
         <div className="book-list" data-testid="book-list">
           {isLoadingBooks ? (
@@ -710,22 +851,51 @@ export function App() {
                   type="button"
                 >
                   <span className="book-title">{book.title}</span>
-                  <span className={`status ${book.status}`}>{book.status}</span>
+                  <span className="book-badges">
+                    <span className={`status ${book.status}`}>{book.status}</span>
+                    {book.review_status !== "approved" ? (
+                      <span className={`review-status ${book.review_status}`}>
+                        {reviewStatusLabel(book.review_status)}
+                      </span>
+                    ) : null}
+                  </span>
                 </button>
-                <button
-                  aria-label={`删除 ${book.title}`}
-                  className="book-delete-button"
-                  disabled={deletingBookId === book.id}
-                  onClick={() => setBookPendingDelete(book)}
-                  title="删除书籍"
-                  type="button"
-                >
-                  {deletingBookId === book.id ? (
-                    <Loader2 className="spin" size={15} />
-                  ) : (
-                    <Trash2 size={15} />
-                  )}
-                </button>
+                {currentUser?.is_admin && book.review_status !== "approved" ? (
+                  <div className="book-review-actions">
+                    <button
+                      disabled={reviewingBookId === book.id}
+                      onClick={() => handleReviewBook(book, "approved")}
+                      type="button"
+                    >
+                      批准
+                    </button>
+                    {book.review_status === "pending_review" ? (
+                      <button
+                        disabled={reviewingBookId === book.id}
+                        onClick={() => handleReviewBook(book, "rejected")}
+                        type="button"
+                      >
+                        拒绝
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
+                {canDeleteBook(book) ? (
+                  <button
+                    aria-label={`删除 ${book.title}`}
+                    className="book-delete-button"
+                    disabled={deletingBookId === book.id}
+                    onClick={() => setBookPendingDelete(book)}
+                    title="删除书籍"
+                    type="button"
+                  >
+                    {deletingBookId === book.id ? (
+                      <Loader2 className="spin" size={15} />
+                    ) : (
+                      <Trash2 size={15} />
+                    )}
+                  </button>
+                ) : null}
               </div>
             ))
           )}

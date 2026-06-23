@@ -15,8 +15,15 @@
 - 注册、登录、当前用户和退出登录
 - 未登录时保留本地 `local` 用户模式
 - 登录后阅读进度按用户隔离
+- 公共书库 + 上传审批最小闭环
+  - 管理员上传自动发布
+  - 普通用户上传默认待审批
+  - 管理员可在独立待审批列表或书籍行批准/拒绝
+  - 拒绝时可填写审批备注
+  - 普通用户只看到已发布书籍和自己上传的待审/拒绝书籍
+- 小说朗读语气基础优化：按对白、长句、感叹、省略号和轻声/喊话等特征调整 Edge TTS 语速/音高
 
-当前仍未实现：PDF 解析、完整权限/书库归属隔离。
+当前仍未实现：PDF 解析、更细的审批审计记录、真正的多角色分配朗读。
 
 ## 技术栈
 
@@ -115,6 +122,13 @@ cd D:\listen_book
 ```powershell
 cd D:\listen_book
 .venv\Scripts\python.exe scripts\smoke_api.py
+```
+
+浏览器 E2E：
+
+```powershell
+cd D:\listen_book\frontend
+npm run test:e2e
 ```
 
 更多运行和排错步骤见 [docs/runbook.md](docs/runbook.md)。

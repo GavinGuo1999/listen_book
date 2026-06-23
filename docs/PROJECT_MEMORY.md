@@ -81,15 +81,134 @@ Get-Content -Path docs\PROJECT_MEMORY.md -Encoding UTF8
 - 正式浏览器 E2E smoke：上传 TXT、等待解析、阅读进度恢复、删除临时书
 - 登录/多用户进度隔离最小闭环：注册、登录、当前用户、退出登录、token 鉴权
 - 未登录时保留默认本地用户 `local` 模式；登录后阅读进度按用户隔离
+- 公共书库 + 上传审批最小闭环：
+  - 书籍有独立 `review_status`：`pending_review`、`approved`、`rejected`
+  - 管理员上传自动发布，普通用户上传默认待审批
+  - 管理员可通过独立待审批列表、前端书行按钮或 `PATCH /api/books/{book_id}/review` 批准/拒绝
+  - 拒绝时可填写 `review_note` 审批备注
+  - 普通用户只能看到已发布书籍和自己上传的待审/拒绝书籍
+  - 章节、进度、音频接口都会检查书籍可见性，避免绕过审批读取正文
+  - 第一个正式注册用户自动成为管理员；默认本地用户 `local` 仍是管理员
+- 小说朗读语气基础优化：
+  - Edge TTS `model_version=13`
+  - 对白略提高音高/加快，和旁白做基础区分
+  - 长句、逗号密集句、省略号/破折号会放慢
+  - “低声/轻声/喃喃”等轻声标记降低音高，“大声/喊道/怒道”等强情绪标记提高音高
+- 登录/注册浏览器 E2E 脚本已补：注册、退出、重新登录
+- 浏览器 E2E 已覆盖审批路径：普通用户上传待审、其他用户不可见、本地管理员待审批列表批准、批准后其他用户可见
 - 服务启动后的 API smoke 脚本：`scripts/smoke_api.py`
 - Windows 启停脚本：`scripts\start-dev.bat`、`scripts\stop-dev.bat`
 
 当前主要未完成：
 
-- PDF 解析
-- 完整书库归属/权限隔离
-- 登录链路浏览器 E2E
-- 更自然的小说朗读：更细的停顿、情绪、角色/旁白风格
+- 更完整的管理员后台体验：审批审计记录、筛选/分页等
+- PDF 解析暂不做；当前上传格式明确收敛为 TXT/EPUB
+- 更自然的小说朗读：真正的多角色音色分配、按章节/角色学习风格
+
+## 最近交接记录：2026-06-23
+
+今天完成：
+
+- 完成独立管理员待审批列表：
+  - 本地 `local` 管理员和正式管理员可在侧边栏看到“待审批书籍”
+  - 待审批列表显示数量、书名、解析状态
+  - 管理员可集中批准发布或拒绝
+  - 拒绝时可填写可选审批备注，写入 `review_note`
+- 收紧前端上传入口：
+  - 上传控件只接受 `.txt,.epub`
+  - 页面明确提示“PDF 暂不接入”
+- 补浏览器 E2E 审批路径：
+  - API 注册非管理员用户
+  - 普通用户通过 UI 登录并上传 TXT
+  - 上传者看到“待审批”
+  - 另一个普通用户看不到待审书
+  - 本地管理员在独立待审批列表批准
+  - 批准后其他普通用户可见
+- 优化小说朗读基础语气：
+  - Edge TTS 版本提升到 `13`，避免复用旧缓存
+  - 对白、长句、逗号密集句、省略号/破折号、轻声标记、强情绪标记都会影响语速/音高
+  - 疑问句仍保持中性，不恢复特殊升调
+- 补 TTS 语气规则单元测试。
+- 更新 README、runbook 和本项目记忆。
+
+今天验证：
+
+- `.venv\Scripts\python.exe -m pytest backend\tests -q` 通过，当前为 `21 passed`
+- `.venv\Scripts\ruff.exe check --no-cache backend\app backend\tests scripts\smoke_api.py` 通过
+- `cd frontend && npm run build` 通过
+- `cd frontend && npm run test:e2e` 通过，当前为 `4 passed`
+
+当前注意事项：
+
+- 本轮 E2E 通过一次性 PowerShell 命令临时启动后端；如果后端是本轮启动的，测试结束后已停止。
+- Playwright 仍只自动启动前端；常规手动运行 E2E 前仍需保证后端 `127.0.0.1:8000` 已启动。
+- 本地 `master` 仍比 `origin/master` 多提交，当前工作区改动准备收口提交，尚未推送。
+
+下次优先任务：
+
+1. 如需实机确认，运行 `scripts\stop-dev.bat` 和 `scripts\start-dev.bat` 后打开页面复核管理员待审批列表。
+2. 可继续做审批审计记录/分页筛选。
+3. 或继续推进真正的多角色小说朗读。
+
+## 最近交接记录：2026-06-22
+
+今天完成：
+
+- 确定书库模型方向：公共书库为主，普通用户上传需要管理员审批；EPUB 解析当前够用，PDF 暂不继续。
+- 新增书籍审核数据模型和迁移：
+  - `backend/alembic/versions/20260622_0002_book_review_workflow.py`
+  - `Book.uploader_id`
+  - `Book.review_status`
+  - `Book.review_note`
+- 新增公共书库可见性规则：
+  - 管理员可见全部书籍
+  - 普通用户可见已批准公共书籍 + 自己上传的待审/拒绝书籍
+  - 章节、进度、音频生成/预取/状态/文件接口都会校验书籍可见性
+- 新增管理员审批能力：
+  - `PATCH /api/books/{book_id}/review`
+  - 前端书库行对管理员显示“批准/拒绝”
+  - 非管理员审批返回 403
+- 上传规则调整：
+  - 管理员上传自动 `approved`
+  - 普通用户上传默认 `pending_review`
+  - 支持格式收敛为 TXT/EPUB；PDF 上传会被拒绝
+- 管理员初始化规则：
+  - 第一个正式注册用户自动成为管理员
+  - 默认本地用户 `local` 仍为管理员
+- 补登录/注册浏览器 E2E 脚本：
+  - 注册
+  - 退出登录
+  - 重新登录
+- 实机验证时修复：
+  - `scripts/smoke_api.py` 使用 `httpx.Client(..., trust_env=False)`，避免本机 API smoke 被环境代理拦到 502
+  - 注册成功和退出登录后默认切回“登录”页签，避免重新登录时误发注册请求导致 409
+- 更新前端类型、API、书库状态徽标和审批按钮。
+- 补后端自动化测试：
+  - 普通用户上传待审批
+  - 其他普通用户不可见未审批书籍
+  - 非管理员不能审批
+  - 管理员批准后公共可见
+
+今天验证：
+
+- `.venv\Scripts\python.exe -m pytest backend\tests -q` 通过，当前为 `16 passed`
+- `.venv\Scripts\ruff.exe check --no-cache backend\app backend\tests scripts\smoke_api.py` 通过
+- `cd frontend && npm run build` 通过
+- `.venv\Scripts\python.exe scripts\smoke_api.py` 通过
+- `cd frontend && npm run test:e2e` 通过，当前为 `3 passed`
+- `git diff --check` 通过（仅有 Windows 换行提示）
+
+当前注意事项：
+
+- Alembic 迁移 `20260622_0002` 已在本机执行过。
+- 本轮 Codex 已后台启动过后端 `127.0.0.1:8000` 和前端 `127.0.0.1:5173` 完成实机验证；验证结束后已用 `scripts\stop-dev.bat` 停止服务。
+- 本地 `master` 原本比 `origin/master` 多 4 个提交；本轮还有未提交改动，尚未推送。
+
+下次优先任务：
+
+1. 手测审批流：普通用户上传、管理员批准/拒绝、其他用户可见性。
+2. 选择是否做独立管理员待审批列表。
+3. 否则转向小说朗读体验优化。
 
 ## 最近交接记录：2026-06-20
 

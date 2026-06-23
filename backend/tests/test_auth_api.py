@@ -19,6 +19,7 @@ def test_register_login_and_me(client: TestClient) -> None:
     assert register_payload["access_token"]
     assert register_payload["user"]["username"] == "alice"
     assert register_payload["user"]["display_name"] == "Alice Reader"
+    assert register_payload["user"]["is_admin"] is True
 
     duplicate_response = client.post(
         "/api/auth/register",
@@ -45,6 +46,13 @@ def test_register_login_and_me(client: TestClient) -> None:
 
     invalid_me_response = client.get("/api/auth/me", headers={"Authorization": "Bearer invalid"})
     assert invalid_me_response.status_code == 401
+
+    bob_response = client.post(
+        "/api/auth/register",
+        json={"username": "bob", "password": "secret123"},
+    )
+    assert bob_response.status_code == 201
+    assert bob_response.json()["user"]["is_admin"] is False
 
 
 def test_missing_auth_uses_default_local_user(

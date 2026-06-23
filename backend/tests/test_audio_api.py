@@ -70,10 +70,11 @@ def test_generate_sentence_audio_validates_missing_sentence(
     client: TestClient,
     fake_tts: FakeTTSProvider,
 ) -> None:
-    response = client.post(f"/api/audio/sentences/{uuid4()}")
+    missing_sentence_id = uuid4()
+    response = client.post(f"/api/audio/sentences/{missing_sentence_id}")
 
     assert response.status_code == 404
-    assert response.json()["detail"] == "Sentence not found"
+    assert response.json()["detail"] == f"Sentence not found: {missing_sentence_id}"
     assert fake_tts.calls == 0
 
 

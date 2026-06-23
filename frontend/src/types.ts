@@ -3,6 +3,9 @@ export type BookSummary = {
   title: string;
   author: string | null;
   status: string;
+  review_status: string;
+  review_note: string | null;
+  uploader_id: string | null;
   created_at: string;
 };
 

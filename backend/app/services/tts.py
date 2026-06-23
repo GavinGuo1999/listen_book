@@ -107,9 +107,25 @@ class WindowsSapiTTSProvider(TTSProvider):
 
 class EdgeTTSProvider(TTSProvider):
     model_name = "edge-tts"
-    model_version = "12"
+    model_version = "13"
 
     CLOSING_PUNCTUATION = "\"'\u201d\u2019\uff09)]\u300b\u3011\u300d\u300f"
+    DIALOGUE_OPENERS = ("\"", "'", "\u201c", "\u2018", "\u300c", "\u300e")
+    DIALOGUE_MARKERS = ("\uff1a\u201c", ":\u201c", ':"', "\uff1a\u300c", ":\u300c")
+    SOFT_SPEECH_MARKERS = (
+        "\u4f4e\u58f0",
+        "\u8f7b\u58f0",
+        "\u5c0f\u58f0",
+        "\u5583\u5583",
+        "\u53f9\u9053",
+    )
+    STRONG_SPEECH_MARKERS = (
+        "\u558a\u9053",
+        "\u53eb\u9053",
+        "\u5927\u58f0",
+        "\u6012\u9053",
+        "\u559d\u9053",
+    )
     QUESTION_ENDINGS = ("?", "\uff1f")
     QUESTION_PARTICLES = (
         "\u5417",
@@ -131,17 +147,44 @@ class EdgeTTSProvider(TTSProvider):
         stripped_without_terminal = stripped.rstrip("\u3002.!\uff01\u2026")
         return stripped_without_terminal.endswith(self.QUESTION_PARTICLES)
 
+    def is_dialogue(self, text: str) -> bool:
+        stripped = text.strip()
+        return stripped.startswith(self.DIALOGUE_OPENERS) or any(
+            marker in stripped for marker in self.DIALOGUE_MARKERS
+        )
+
     def infer_prosody(self, text: str, speed: int) -> tuple[str, str]:
         rate_delta = max(-50, min(100, speed - 100))
         pitch = "+0Hz"
         stripped = text.strip().rstrip(self.CLOSING_PUNCTUATION)
+        sentence_length = len(stripped)
+
+        if sentence_length >= 70:
+            rate_delta -= 8
+        elif sentence_length >= 42:
+            rate_delta -= 4
+
+        soft_pause_count = sum(stripped.count(mark) for mark in ("，", ",", "；", ";", "、"))
+        if soft_pause_count >= 3:
+            rate_delta -= 3
+
+        if self.is_dialogue(text):
+            rate_delta += 2
+            pitch = "+4Hz"
+
+        if any(marker in stripped for marker in self.SOFT_SPEECH_MARKERS):
+            rate_delta -= 5
+            pitch = "-4Hz"
+        elif any(marker in stripped for marker in self.STRONG_SPEECH_MARKERS):
+            rate_delta += 5
+            pitch = "+10Hz"
 
         if stripped.endswith(("!", "\uff01")):
             rate_delta += 4
-            pitch = "+8Hz"
-        elif stripped.endswith(("...", "\u2026")):
-            rate_delta -= 6
-            pitch = "-4Hz"
+            pitch = "+12Hz" if pitch == "+10Hz" else "+8Hz"
+        elif stripped.endswith(("...", "\u2026", "\u2014\u2014")):
+            rate_delta -= 8
+            pitch = "-6Hz"
 
         rate_delta = max(-50, min(100, rate_delta))
         return f"{rate_delta:+d}%", pitch
