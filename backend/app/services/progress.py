@@ -9,33 +9,12 @@ from app.models.progress import ReadingProgress
 from app.models.user import User
 from app.services.books import ensure_book_accessible
 
-DEFAULT_USERNAME = "local"
-
-
-def get_or_create_default_user(db: Session) -> User:
-    user = db.scalar(select(User).where(User.username == DEFAULT_USERNAME))
-    if user is not None:
-        return user
-
-    user = User(
-        username=DEFAULT_USERNAME,
-        display_name="Local Reader",
-        password_hash="local-only",
-        is_admin=True,
-        is_active=True,
-    )
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-    return user
-
 
 def get_book_progress(
     db: Session,
     book_id: UUID,
-    user: User | None = None,
+    user: User,
 ) -> ReadingProgress | None:
-    user = user or get_or_create_default_user(db)
     ensure_book_accessible(db, book_id, user)
     return db.scalar(
         select(ReadingProgress).where(
@@ -49,10 +28,9 @@ def save_book_progress(
     db: Session,
     book_id: UUID,
     sentence_id: UUID | None,
+    user: User,
     audio_position_ms: int = 0,
-    user: User | None = None,
 ) -> ReadingProgress:
-    user = user or get_or_create_default_user(db)
     ensure_book_accessible(db, book_id, user)
 
     chapter_id: UUID | None = None

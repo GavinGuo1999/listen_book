@@ -12,10 +12,13 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.user import User
-from app.services.progress import DEFAULT_USERNAME
 
 pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 TOKEN_TTL = timedelta(days=30)
+USERNAME_MIN_LENGTH = 3
+USERNAME_MAX_LENGTH = 64
+PASSWORD_MIN_LENGTH = 6
+PASSWORD_MAX_LENGTH = 128
 
 
 def normalize_username(username: str) -> str:
@@ -35,21 +38,20 @@ def create_user(
     *,
     username: str,
     password: str,
-    display_name: str | None = None,
 ) -> User:
     normalized_username = normalize_username(username)
+    validate_username(normalized_username)
+    validate_password(password)
+
     existing = db.scalar(select(User).where(User.username == normalized_username))
     if existing is not None:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Username already exists")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="用户名已存在")
 
-    first_registered_user = (
-        db.scalar(select(User.id).where(User.username != DEFAULT_USERNAME).limit(1)) is None
-    )
     user = User(
         username=normalized_username,
-        display_name=display_name.strip() if display_name and display_name.strip() else username,
+        display_name=normalized_username,
         password_hash=hash_password(password),
-        is_admin=first_registered_user,
+        is_admin=False,
         is_active=True,
     )
     db.add(user)
@@ -58,11 +60,76 @@ def create_user(
     return user
 
 
-def authenticate_user(db: Session, *, username: str, password: str) -> User:
-    user = db.scalar(select(User).where(User.username == normalize_username(username)))
-    if user is None or not user.is_active or not verify_password(password, user.password_hash):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+def bootstrap_admin_user(db: Session, *, username: str, password: str) -> User:
+    normalized_username = normalize_username(username)
+    validate_username(normalized_username)
+    validate_password(password)
+
+    user = db.scalar(select(User).where(User.username == normalized_username))
+    if user is None:
+        user = User(
+            username=normalized_username,
+            display_name=normalized_username,
+            password_hash=hash_password(password),
+            is_admin=True,
+            is_active=True,
+        )
+        db.add(user)
+    else:
+        user.display_name = user.display_name or normalized_username
+        user.password_hash = hash_password(password)
+        user.is_admin = True
+        user.is_active = True
+    db.commit()
+    db.refresh(user)
     return user
+
+
+def authenticate_user(db: Session, *, username: str, password: str) -> User:
+    normalized_username = normalize_username(username)
+    if not normalized_username:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="请输入用户名")
+    if not password:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="请输入密码")
+
+    user = db.scalar(select(User).where(User.username == normalized_username))
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="用户名不存在")
+    if not user.is_active:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="用户已停用")
+    if not verify_password(password, user.password_hash):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="密码不正确")
+    return user
+
+
+def validate_username(username: str) -> None:
+    if not username:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="请输入用户名")
+    if len(username) < USERNAME_MIN_LENGTH:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"用户名至少需要 {USERNAME_MIN_LENGTH} 个字符",
+        )
+    if len(username) > USERNAME_MAX_LENGTH:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"用户名不能超过 {USERNAME_MAX_LENGTH} 个字符",
+        )
+
+
+def validate_password(password: str) -> None:
+    if not password:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="请输入密码")
+    if len(password) < PASSWORD_MIN_LENGTH:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"密码至少需要 {PASSWORD_MIN_LENGTH} 个字符",
+        )
+    if len(password) > PASSWORD_MAX_LENGTH:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"密码不能超过 {PASSWORD_MAX_LENGTH} 个字符",
+        )
 
 
 def create_access_token(user: User) -> str:

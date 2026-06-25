@@ -13,12 +13,14 @@
 - 精确播放位置保存/恢复
 - 浏览器 E2E 和后端 API 自动化测试
 - 注册、登录、当前用户和退出登录
-- 未登录时保留本地 `local` 用户模式
+- 独立登录/注册页，未登录不能访问书库和审批
+- 登录态使用后端 HttpOnly Cookie
 - 登录后阅读进度按用户隔离
 - 公共书库 + 上传审批最小闭环
+  - 管理员账号由 `.env` 显式 bootstrap
   - 管理员上传自动发布
   - 普通用户上传默认待审批
-  - 管理员可在独立待审批列表或书籍行批准/拒绝
+  - 管理员可在 `/admin` 后台批准/拒绝
   - 拒绝时可填写审批备注
   - 管理员审核中心可查看上传者、上传时间、解析失败筛选、分页和审批历史
   - 普通用户只看到已发布书籍和自己上传的待审/拒绝书籍
@@ -60,6 +62,15 @@ npm install --no-audit --no-fund
 cd D:\listen_book\backend
 ..\.venv\Scripts\alembic.exe upgrade head
 ```
+
+配置 bootstrap 管理员（示例，实际密码写在本机 `.env`，不要提交）：
+
+```text
+LISTEN_BOOK_BOOTSTRAP_ADMIN_USERNAME=admin
+LISTEN_BOOK_BOOTSTRAP_ADMIN_PASSWORD=change-me-admin-password
+```
+
+启动后系统会确保该用户存在、启用且拥有管理员权限。普通注册用户不会自动成为管理员。
 
 启动开发服务：
 

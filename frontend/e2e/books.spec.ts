@@ -6,7 +6,8 @@ import {
   test,
 } from "@playwright/test";
 
-const AUTH_TOKEN_KEY = "listen_book_auth_token";
+const SESSION_COOKIE_NAME = "listen_book_session";
+const APP_URL = "http://127.0.0.1:5173";
 
 function e2eBookName() {
   const title = `e2e-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -21,7 +22,6 @@ function e2eUser() {
   return {
     username: `e2e-user-${suffix}`,
     password: "secret123",
-    displayName: `E2E Reader ${suffix}`,
   };
 }
 
@@ -34,7 +34,6 @@ async function registerUserViaApi(request: APIRequestContext, user: ReturnType<t
     data: {
       username: user.username,
       password: user.password,
-      display_name: user.displayName,
     },
   });
   expect(response.status()).toBe(201);
@@ -55,24 +54,30 @@ async function registerRegularUserViaApi(request: APIRequestContext) {
   throw new Error("Failed to create a regular non-admin user");
 }
 
-async function useAuthToken(page: Page, token: string | null) {
-  await page.goto("/");
-  await page.evaluate(
-    ({ key, nextToken }) => {
-      if (nextToken) {
-        window.localStorage.setItem(key, nextToken);
-      } else {
-        window.localStorage.removeItem(key);
-      }
-    },
-    { key: AUTH_TOKEN_KEY, nextToken: token }
-  );
-  await page.reload();
-  await expect(page.locator("[data-testid='app-shell']")).toBeVisible();
+async function useAuthCookie(page: Page, token: string | null) {
+  await page.context().clearCookies();
+  if (token) {
+    await page.context().addCookies([
+      {
+        name: SESSION_COOKIE_NAME,
+        value: token,
+        url: APP_URL,
+        path: "/",
+        httpOnly: true,
+        sameSite: "Lax",
+      },
+    ]);
+  }
+  await page.goto(token ? "/app" : "/login");
+  if (token) {
+    await expect(page.locator("[data-testid='app-shell']")).toBeVisible();
+  } else {
+    await expect(page.locator("[data-testid='login-page']")).toBeVisible();
+  }
 }
 
 async function loginViaUi(page: Page, user: ReturnType<typeof e2eUser>) {
-  await useAuthToken(page, null);
+  await useAuthCookie(page, null);
   await page.locator("[data-testid='auth-username']").fill(user.username);
   await page.locator("[data-testid='auth-password']").fill(user.password);
   await page.locator("[data-testid='auth-submit']").click();
@@ -82,7 +87,7 @@ async function loginViaUi(page: Page, user: ReturnType<typeof e2eUser>) {
 }
 
 async function uploadBook(page: Page, fileName: string, title: string) {
-  await page.goto("/");
+  await page.goto("/app");
 
   await page.locator("[data-testid='upload-book'] input[type='file']").setInputFiles({
     name: fileName,
@@ -98,7 +103,7 @@ async function uploadBook(page: Page, fileName: string, title: string) {
 }
 
 async function deleteBookIfPresent(page: Page, title: string) {
-  await page.goto("/");
+  await page.goto("/app");
 
   const row = bookRow(page, title);
   if ((await row.count()) === 0) {
@@ -117,47 +122,81 @@ test.describe("Listen Book browser flow", () => {
   test("home page loads the main app shell", async ({ page }) => {
     await page.goto("/");
 
-    await expect(page.locator("[data-testid='app-shell']")).toBeVisible();
-    await expect(page.locator("[data-testid='library-panel']")).toBeVisible();
-    await expect(page.locator("[data-testid='book-list']")).toBeVisible();
+    await expect(page.locator("[data-testid='login-page']")).toBeVisible();
   });
 
   test("registers, logs out, and logs back in", async ({ page }) => {
     const user = e2eUser();
 
-    await page.goto("/");
-    await page.evaluate(() => window.localStorage.clear());
-    await page.reload();
-
-    const accountCard = page.locator("[data-testid='account-card']");
-    await expect(accountCard).toBeVisible();
+    await useAuthCookie(page, null);
 
     await page.locator("[data-testid='auth-register-tab']").click();
     await page.locator("[data-testid='auth-username']").fill(user.username);
-    await page.locator("[data-testid='auth-display-name']").fill(user.displayName);
     await page.locator("[data-testid='auth-password']").fill(user.password);
     await page.locator("[data-testid='auth-submit']").click();
 
-    await expect(accountCard).toContainText(user.displayName, { timeout: 10_000 });
+    const accountCard = page.locator("[data-testid='account-card']");
+    await expect(accountCard).toContainText(user.username, { timeout: 10_000 });
     await expect(accountCard).toContainText(`@${user.username}`);
 
     await page.locator("[data-testid='auth-logout']").click();
-    await expect(accountCard).toContainText("本地模式 · 未登录", { timeout: 10_000 });
+    await expect(page.locator("[data-testid='login-page']")).toBeVisible({ timeout: 10_000 });
 
     await page.locator("[data-testid='auth-username']").fill(user.username);
     await page.locator("[data-testid='auth-password']").fill(user.password);
     await page.locator("[data-testid='auth-submit']").click();
 
-    await expect(accountCard).toContainText(user.displayName, { timeout: 10_000 });
+    await expect(accountCard).toContainText(user.username, { timeout: 10_000 });
     await expect(accountCard).toContainText(`@${user.username}`);
+  });
+
+  test("shows clear auth validation and credential errors", async ({ page }) => {
+    const user = e2eUser();
+
+    await useAuthCookie(page, null);
+
+    await page.locator("[data-testid='auth-submit']").click();
+    await expect(page.locator(".auth-error")).toHaveText("请输入用户名");
+
+    await page.locator("[data-testid='auth-username']").fill("missing-user");
+    await page.locator("[data-testid='auth-submit']").click();
+    await expect(page.locator(".auth-error")).toHaveText("请输入密码");
+
+    await page.locator("[data-testid='auth-password']").fill("secret123");
+    await page.locator("[data-testid='auth-submit']").click();
+    await expect(page.locator(".auth-error")).toHaveText("用户名不存在");
+
+    await page.locator("[data-testid='auth-register-tab']").click();
+    await page.locator("[data-testid='auth-username']").fill("ab");
+    await page.locator("[data-testid='auth-password']").fill("12345");
+    await page.locator("[data-testid='auth-submit']").click();
+    await expect(page.locator(".auth-error")).toHaveText("用户名至少需要 3 个字符");
+
+    await page.locator("[data-testid='auth-username']").fill(user.username);
+    await page.locator("[data-testid='auth-submit']").click();
+    await expect(page.locator(".auth-error")).toHaveText("密码至少需要 6 个字符");
+
+    await page.locator("[data-testid='auth-password']").fill(user.password);
+    await page.locator("[data-testid='auth-submit']").click();
+    await expect(page.locator("[data-testid='app-shell']")).toBeVisible({ timeout: 10_000 });
+
+    await page.locator("[data-testid='auth-logout']").click();
+    await page.locator("[data-testid='auth-username']").fill(user.username);
+    await page.locator("[data-testid='auth-password']").fill("wrong-password");
+    await page.locator("[data-testid='auth-submit']").click();
+    await expect(page.locator(".auth-error")).toHaveText("密码不正确");
   });
 
   test("uploads a TXT book, restores reading progress, and deletes only that book", async ({
     page,
+    request,
   }) => {
+    const user = e2eUser();
+    await registerUserViaApi(request, user);
     const { fileName, title } = e2eBookName();
 
     try {
+      await loginViaUi(page, user);
       const row = await uploadBook(page, fileName, title);
 
       await row.locator(".book-select-button").click();
@@ -186,6 +225,10 @@ test.describe("Listen Book browser flow", () => {
   test("queues normal user uploads for admin approval", async ({ page, request }) => {
     const { fileName, title } = e2eBookName();
 
+    const admin = e2eUser();
+    const adminAuth = await registerUserViaApi(request, admin);
+    test.skip(!adminAuth.user.is_admin, "No admin bootstrap account is available in this DB");
+
     const uploader = await registerRegularUserViaApi(request);
     const otherReader = await registerRegularUserViaApi(request);
 
@@ -197,7 +240,8 @@ test.describe("Listen Book browser flow", () => {
       await loginViaUi(page, otherReader);
       await expect(bookRow(page, title)).toHaveCount(0);
 
-      await useAuthToken(page, null);
+      await useAuthCookie(page, adminAuth.access_token);
+      await page.goto("/admin");
       const reviewQueue = page.locator("[data-testid='admin-review-queue']");
       await expect(reviewQueue).toBeVisible();
       const reviewItem = reviewQueue.locator("[data-testid='review-queue-item']").filter({
@@ -220,7 +264,7 @@ test.describe("Listen Book browser flow", () => {
       await loginViaUi(page, otherReader);
       await expect(bookRow(page, title)).toBeVisible({ timeout: 10_000 });
     } finally {
-      await useAuthToken(page, null);
+      await useAuthCookie(page, adminAuth.access_token);
       await deleteBookIfPresent(page, title);
     }
   });

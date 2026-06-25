@@ -18,27 +18,38 @@ from app.models.book import (
 )
 from app.models.job import Job
 from app.models.progress import ReadingProgress
-from app.services.progress import get_or_create_default_user
+from app.models.user import User
+from app.services.auth import bootstrap_admin_user
 from app.services.text_splitter import text_hash
 
 
-def test_upload_txt_parses_book_to_ready(client: TestClient) -> None:
+def test_books_require_authentication(client: TestClient) -> None:
+    client.cookies.clear()
+
+    response = client.get("/api/books")
+
+    assert response.status_code == 401
+
+
+def test_upload_txt_parses_book_to_ready(client: TestClient, db_session: Session) -> None:
+    headers = auth_headers(register_admin_user(client, db_session))
     response = client.post(
         "/api/books",
+        headers=headers,
         files={"file": ("sample.txt", "第一句。第二句？".encode(), "text/plain")},
     )
 
     assert response.status_code == 201
     book_id = response.json()["id"]
 
-    books_response = client.get("/api/books")
+    books_response = client.get("/api/books", headers=headers)
     assert books_response.status_code == 200
     [book] = books_response.json()
     assert book["id"] == book_id
     assert book["status"] == BookStatus.READY.value
     assert book["review_status"] == BookReviewStatus.APPROVED.value
 
-    chapters_response = client.get(f"/api/books/{book_id}/chapters")
+    chapters_response = client.get(f"/api/books/{book_id}/chapters", headers=headers)
     assert chapters_response.status_code == 200
     chapters = chapters_response.json()
     assert len(chapters) == 1
@@ -46,38 +57,49 @@ def test_upload_txt_parses_book_to_ready(client: TestClient) -> None:
     assert [sentence["text"] for sentence in sentences] == ["第一句。", "第二句？"]
 
 
-def test_upload_gb18030_txt_parses_book_to_ready(client: TestClient) -> None:
+def test_upload_gb18030_txt_parses_book_to_ready(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    headers = auth_headers(register_admin_user(client, db_session))
     response = client.post(
         "/api/books",
+        headers=headers,
         files={"file": ("gb.txt", "增广贤文。".encode("gb18030"), "text/plain")},
     )
 
     assert response.status_code == 201
     book_id = response.json()["id"]
 
-    chapters_response = client.get(f"/api/books/{book_id}/chapters")
+    chapters_response = client.get(f"/api/books/{book_id}/chapters", headers=headers)
     assert chapters_response.status_code == 200
     sentences = chapters_response.json()[0]["paragraphs"][0]["sentences"]
     assert sentences[0]["text"] == "增广贤文。"
 
 
-def test_upload_epub_parses_spine_chapters_to_ready(client: TestClient, tmp_path) -> None:
+def test_upload_epub_parses_spine_chapters_to_ready(
+    client: TestClient,
+    db_session: Session,
+    tmp_path,
+) -> None:
+    headers = auth_headers(register_admin_user(client, db_session))
     epub_path = tmp_path / "sample.epub"
     create_minimal_epub(epub_path)
 
     response = client.post(
         "/api/books",
+        headers=headers,
         files={"file": ("sample.epub", epub_path.read_bytes(), "application/epub+zip")},
     )
 
     assert response.status_code == 201
     book_id = response.json()["id"]
 
-    books_response = client.get("/api/books")
+    books_response = client.get("/api/books", headers=headers)
     assert books_response.status_code == 200
     assert books_response.json()[0]["status"] == BookStatus.READY.value
 
-    chapters_response = client.get(f"/api/books/{book_id}/chapters")
+    chapters_response = client.get(f"/api/books/{book_id}/chapters", headers=headers)
     assert chapters_response.status_code == 200
     chapters = chapters_response.json()
     assert [chapter["title"] for chapter in chapters] == ["第一章", "第二章"]
@@ -96,16 +118,18 @@ def test_upload_epub_parses_spine_chapters_to_ready(client: TestClient, tmp_path
     assert second_chapter_sentences == ["第二章", "第三句！"]
 
 
-def test_upload_invalid_epub_marks_book_failed(client: TestClient) -> None:
+def test_upload_invalid_epub_marks_book_failed(client: TestClient, db_session: Session) -> None:
+    headers = auth_headers(register_admin_user(client, db_session))
     response = client.post(
         "/api/books",
+        headers=headers,
         files={"file": ("broken.epub", b"not a zip", "application/epub+zip")},
     )
 
     assert response.status_code == 201
     book_id = response.json()["id"]
 
-    books_response = client.get("/api/books")
+    books_response = client.get("/api/books", headers=headers)
     assert books_response.status_code == 200
     [book] = books_response.json()
     assert book["id"] == book_id
@@ -114,8 +138,9 @@ def test_upload_invalid_epub_marks_book_failed(client: TestClient) -> None:
 
 def test_user_upload_waits_for_admin_approval_before_public_visibility(
     client: TestClient,
+    db_session: Session,
 ) -> None:
-    admin_token = register_user(client, "admin")
+    admin_token = register_admin_user(client, db_session)
     uploader_token = register_user(client, "uploader")
     other_token = register_user(client, "other-reader")
 
@@ -226,13 +251,15 @@ def test_progress_api_saves_reads_and_validates_sentence(
     db_session: Session,
 ) -> None:
     book, sentence = create_ready_book(db_session)
+    headers = auth_headers(register_user(client, "reader"))
 
-    empty_response = client.get(f"/api/books/{book.id}/progress")
+    empty_response = client.get(f"/api/books/{book.id}/progress", headers=headers)
     assert empty_response.status_code == 200
     assert empty_response.json() is None
 
     save_response = client.put(
         f"/api/books/{book.id}/progress",
+        headers=headers,
         json={"sentence_id": str(sentence.id), "audio_position_ms": 8500},
     )
     assert save_response.status_code == 200
@@ -241,19 +268,20 @@ def test_progress_api_saves_reads_and_validates_sentence(
     assert payload["sentence_id"] == str(sentence.id)
     assert payload["audio_position_ms"] == 8500
 
-    read_response = client.get(f"/api/books/{book.id}/progress")
+    read_response = client.get(f"/api/books/{book.id}/progress", headers=headers)
     assert read_response.status_code == 200
     assert read_response.json()["audio_position_ms"] == 8500
 
     other_book, other_sentence = create_ready_book(db_session, title="Other")
     invalid_response = client.put(
         f"/api/books/{book.id}/progress",
+        headers=headers,
         json={"sentence_id": str(other_sentence.id), "audio_position_ms": 1},
     )
     assert invalid_response.status_code == 400
     assert invalid_response.json()["detail"] == "Sentence does not belong to this book"
 
-    missing_response = client.get(f"/api/books/{uuid4()}/progress")
+    missing_response = client.get(f"/api/books/{uuid4()}/progress", headers=headers)
     assert missing_response.status_code == 404
 
     assert other_book.id != book.id
@@ -264,6 +292,7 @@ def test_delete_book_cleans_database_rows_and_storage_files(
     db_session: Session,
 ) -> None:
     book, sentence = create_ready_book(db_session, title="Delete Me")
+    headers = auth_headers(register_admin_user(client, db_session))
 
     source_path = settings.uploads_dir / "delete-me.txt"
     source_path.write_text("正文。", encoding="utf-8")
@@ -293,7 +322,7 @@ def test_delete_book_cleans_database_rows_and_storage_files(
         )
     )
 
-    user = get_or_create_default_user(db_session)
+    user = db_session.query(User).filter(User.username == "admin").one()
     db_session.add(
         ReadingProgress(
             user_id=user.id,
@@ -313,7 +342,7 @@ def test_delete_book_cleans_database_rows_and_storage_files(
     )
     db_session.commit()
 
-    response = client.delete(f"/api/books/{book.id}")
+    response = client.delete(f"/api/books/{book.id}", headers=headers)
     assert response.status_code == 204
 
     assert db_session.get(Book, book.id) is None
@@ -326,7 +355,7 @@ def test_delete_book_cleans_database_rows_and_storage_files(
     assert not source_path.exists()
     assert not audio_path.exists()
 
-    missing_response = client.delete(f"/api/books/{book.id}")
+    missing_response = client.delete(f"/api/books/{book.id}", headers=headers)
     assert missing_response.status_code == 404
 
 
@@ -363,6 +392,20 @@ def register_user(client: TestClient, username: str) -> str:
     )
     assert response.status_code == 201
     return response.json()["access_token"]
+
+
+def register_admin_user(client: TestClient, db_session: Session, username: str = "admin") -> str:
+    bootstrap_admin_user(db_session, username=username, password="secret123")
+    response = client.post(
+        "/api/auth/login",
+        json={"username": username, "password": "secret123"},
+    )
+    assert response.status_code == 200
+    return response.json()["access_token"]
+
+
+def auth_headers(token: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {token}"}
 
 
 def create_minimal_epub(path) -> None:

@@ -16,6 +16,10 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+psycopg://listen_book_app:change-me@localhost:5432/listen_book"
     secret_key: str = "change-me-in-development"
+    session_cookie_name: str = "listen_book_session"
+    session_cookie_secure: bool = False
+    bootstrap_admin_username: str | None = None
+    bootstrap_admin_password: str | None = None
     storage_root: Path = Field(default=PROJECT_ROOT / "storage")
     cors_origins_raw: str = Field(
         default="http://localhost:5173,http://127.0.0.1:5173",

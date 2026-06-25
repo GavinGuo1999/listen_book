@@ -1,17 +1,16 @@
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 class UserCreate(BaseModel):
-    username: str = Field(min_length=3, max_length=64)
-    password: str = Field(min_length=6, max_length=128)
-    display_name: str | None = Field(default=None, max_length=120)
+    username: str = ""
+    password: str = ""
 
 
 class UserLogin(BaseModel):
-    username: str
-    password: str
+    username: str = ""
+    password: str = ""
 
 
 class UserRead(BaseModel):

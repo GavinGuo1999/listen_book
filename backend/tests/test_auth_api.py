@@ -2,15 +2,14 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.models.book import Book, BookStatus, Chapter, Paragraph, Sentence
-from app.models.user import User
-from app.services.progress import get_or_create_default_user
+from app.services.auth import bootstrap_admin_user
 from app.services.text_splitter import text_hash
 
 
 def test_register_login_and_me(client: TestClient) -> None:
     register_response = client.post(
         "/api/auth/register",
-        json={"username": "Alice", "password": "secret123", "display_name": "Alice Reader"},
+        json={"username": "Alice", "password": "secret123"},
     )
 
     assert register_response.status_code == 201
@@ -18,8 +17,9 @@ def test_register_login_and_me(client: TestClient) -> None:
     assert register_payload["token_type"] == "bearer"
     assert register_payload["access_token"]
     assert register_payload["user"]["username"] == "alice"
-    assert register_payload["user"]["display_name"] == "Alice Reader"
-    assert register_payload["user"]["is_admin"] is True
+    assert register_payload["user"]["display_name"] == "alice"
+    assert register_payload["user"]["is_admin"] is False
+    assert client.cookies.get("listen_book_session")
 
     duplicate_response = client.post(
         "/api/auth/register",
@@ -32,6 +32,7 @@ def test_register_login_and_me(client: TestClient) -> None:
         json={"username": "alice", "password": "wrong-password"},
     )
     assert failed_login_response.status_code == 401
+    assert failed_login_response.json()["detail"] == "密码不正确"
 
     login_response = client.post(
         "/api/auth/login",
@@ -44,6 +45,10 @@ def test_register_login_and_me(client: TestClient) -> None:
     assert me_response.status_code == 200
     assert me_response.json()["username"] == "alice"
 
+    cookie_me_response = client.get("/api/auth/me")
+    assert cookie_me_response.status_code == 200
+    assert cookie_me_response.json()["username"] == "alice"
+
     invalid_me_response = client.get("/api/auth/me", headers={"Authorization": "Bearer invalid"})
     assert invalid_me_response.status_code == 401
 
@@ -54,16 +59,101 @@ def test_register_login_and_me(client: TestClient) -> None:
     assert bob_response.status_code == 201
     assert bob_response.json()["user"]["is_admin"] is False
 
+    logout_response = client.post("/api/auth/logout")
+    assert logout_response.status_code == 204
+    assert client.cookies.get("listen_book_session") is None
 
-def test_missing_auth_uses_default_local_user(
-    client: TestClient,
-    db_session: Session,
-) -> None:
-    response = client.get("/api/auth/me")
+
+def test_auth_validation_errors_are_specific(client: TestClient) -> None:
+    cases = [
+        (
+            "post",
+            "/api/auth/register",
+            {"username": "", "password": "secret123"},
+            400,
+            "请输入用户名",
+        ),
+        (
+            "post",
+            "/api/auth/register",
+            {"username": "ab", "password": "secret123"},
+            400,
+            "用户名至少需要 3 个字符",
+        ),
+        (
+            "post",
+            "/api/auth/register",
+            {"username": "alice", "password": ""},
+            400,
+            "请输入密码",
+        ),
+        (
+            "post",
+            "/api/auth/register",
+            {"username": "alice", "password": "12345"},
+            400,
+            "密码至少需要 6 个字符",
+        ),
+        (
+            "post",
+            "/api/auth/login",
+            {"username": "", "password": "secret123"},
+            400,
+            "请输入用户名",
+        ),
+        (
+            "post",
+            "/api/auth/login",
+            {"username": "alice", "password": ""},
+            400,
+            "请输入密码",
+        ),
+        (
+            "post",
+            "/api/auth/login",
+            {"username": "missing", "password": "secret123"},
+            401,
+            "用户名不存在",
+        ),
+    ]
+
+    for method, path, json, expected_status, expected_detail in cases:
+        response = getattr(client, method)(path, json=json)
+        assert response.status_code == expected_status
+        assert response.json()["detail"] == expected_detail
+
+    register_response = client.post(
+        "/api/auth/register",
+        json={"username": "alice", "password": "secret123"},
+    )
+    assert register_response.status_code == 201
+
+    duplicate_response = client.post(
+        "/api/auth/register",
+        json={"username": " alice ", "password": "secret123"},
+    )
+    assert duplicate_response.status_code == 409
+    assert duplicate_response.json()["detail"] == "用户名已存在"
+
+
+def test_bootstrap_admin_user_can_login(client: TestClient, db_session: Session) -> None:
+    bootstrap_admin_user(db_session, username="admin", password="secret123")
+
+    response = client.post(
+        "/api/auth/login",
+        json={"username": "admin", "password": "secret123"},
+    )
 
     assert response.status_code == 200
-    assert response.json()["username"] == "local"
-    assert db_session.query(User).filter(User.username == "local").one()
+    assert response.json()["user"]["username"] == "admin"
+    assert response.json()["user"]["is_admin"] is True
+
+
+def test_missing_auth_is_rejected(client: TestClient) -> None:
+    client.cookies.clear()
+    response = client.get("/api/auth/me")
+
+    assert response.status_code == 401
 
 
 def test_progress_is_isolated_by_authenticated_user(
@@ -96,6 +186,7 @@ def test_progress_is_isolated_by_authenticated_user(
         f"/api/books/{book.id}/progress",
         headers={"Authorization": f"Bearer {bob_token}"},
     )
+    client.cookies.clear()
     local_read_response = client.get(f"/api/books/{book.id}/progress")
 
     assert alice_read_response.status_code == 200
@@ -104,10 +195,7 @@ def test_progress_is_isolated_by_authenticated_user(
     assert bob_read_response.status_code == 200
     assert bob_read_response.json()["sentence_id"] == str(second_sentence.id)
     assert bob_read_response.json()["audio_position_ms"] == 2000
-    assert local_read_response.status_code == 200
-    assert local_read_response.json() is None
-
-    assert get_or_create_default_user(db_session).username == "local"
+    assert local_read_response.status_code == 401
 
 
 def register_user(client: TestClient, username: str) -> str:

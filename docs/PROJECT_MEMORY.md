@@ -79,18 +79,19 @@ Get-Content -Path docs\PROJECT_MEMORY.md -Encoding UTF8
 - 后端自动化测试第一批：上传解析、GB18030 解析、阅读进度、书籍删除清理
 - 后端音频接口测试：生成、缓存、失败重试、prefetch/status、文件端点安全检查
 - 正式浏览器 E2E smoke：上传 TXT、等待解析、阅读进度恢复、删除临时书
-- 登录/多用户进度隔离最小闭环：注册、登录、当前用户、退出登录、token 鉴权
-- 未登录时保留默认本地用户 `local` 模式；登录后阅读进度按用户隔离
+- 登录/多用户进度隔离：注册、登录、当前用户、退出登录、Cookie Session 鉴权
+- 独立 `/login` 登录/注册页；未登录不能访问书库、上传、阅读、音频、进度或审批接口
+- 登录后阅读进度按用户隔离
 - 公共书库 + 上传审批最小闭环：
   - 书籍有独立 `review_status`：`pending_review`、`approved`、`rejected`
   - 管理员上传自动发布，普通用户上传默认待审批
-  - 管理员可通过独立待审批列表、前端书行按钮或 `PATCH /api/books/{book_id}/review` 批准/拒绝
+  - 管理员账号由 `.env` 显式 bootstrap，不再使用“第一个注册用户自动成为管理员”
+  - 管理员可通过 `/admin` 后台或 `PATCH /api/books/{book_id}/review` 批准/拒绝
   - 拒绝时可填写 `review_note` 审批备注
   - 管理员审核中心可查看待审批/解析失败/已拒绝/全部筛选、分页、上传者、上传时间和审批历史
   - 审批历史写入 `book_review_events`：审批人、审批时间、原状态、新状态、历史备注
   - 普通用户只能看到已发布书籍和自己上传的待审/拒绝书籍
   - 章节、进度、音频接口都会检查书籍可见性，避免绕过审批读取正文
-  - 第一个正式注册用户自动成为管理员；默认本地用户 `local` 仍是管理员
 - 小说朗读语气基础优化：
   - Edge TTS `model_version=13`
   - 对白略提高音高/加快，和旁白做基础区分
@@ -100,12 +101,65 @@ Get-Content -Path docs\PROJECT_MEMORY.md -Encoding UTF8
 - 浏览器 E2E 已覆盖审批路径：普通用户上传待审、其他用户不可见、本地管理员待审批列表批准、批准后其他用户可见
 - 服务启动后的 API smoke 脚本：`scripts/smoke_api.py`
 - Windows 启停脚本：`scripts\start-dev.bat`、`scripts\stop-dev.bat`
+- 开发库重置脚本：`scripts/reset_dev_data.py`，会清理业务数据和 storage，并按 `.env` 重建 bootstrap 管理员
 
 当前主要未完成：
 
 - 更完整的管理员后台体验：批量审批、复杂筛选、后台权限分层等
+- Playwright E2E 目前仍会写真实开发库；建议后续改为独立测试库或自动清理
 - PDF 解析暂不做；当前上传格式明确收敛为 TXT/EPUB
 - 更自然的小说朗读：真正的多角色音色分配、按章节/角色学习风格
+
+## 最近交接记录：2026-06-25
+
+今天完成：
+
+- 重做认证入口和登录态边界：
+  - `/login` 独立登录/注册页
+  - 未登录请求业务 API 返回 401，不再回退到 `local`
+  - 登录态改为后端 HttpOnly Cookie：`listen_book_session`
+  - 前端不再使用 `localStorage` 保存 token
+- 注册页去掉“显示名”，后端默认 `display_name = username`。
+- 管理员初始化改为显式 bootstrap：
+  - `.env` 配置 `LISTEN_BOOK_BOOTSTRAP_ADMIN_USERNAME`
+  - `.env` 配置 `LISTEN_BOOK_BOOTSTRAP_ADMIN_PASSWORD`
+  - 服务启动时确保该用户存在、启用、是管理员，并同步配置密码
+  - 普通注册用户永远不是管理员
+  - 删除“第一个注册用户自动成为管理员”的规则
+- 管理员后台入口改为 `/admin`，普通业务页不再混入审批中心。
+- 清理开发库污染数据：
+  - 新增 `scripts/reset_dev_data.py`
+  - 已清理测试用户、旧 `local` 用户、书籍、章节、句子、音频、任务、审批记录和 storage 文件
+  - 清理后按 `.env` 重建 `admin` 管理员
+- 改善认证错误提示：
+  - 缺用户名/密码、用户名不存在、密码错误、用户名重复、用户停用等都返回明确中文提示
+  - 前端解析 JSON `detail`，不再直接显示 `{"detail":"..."}`
+  - 前端登录/注册表单增加基础校验
+- 更新 README、runbook 和当天 progress 文档。
+
+今天验证：
+
+- `.venv\Scripts\python.exe -m pytest backend\tests` 通过，当前为 `24 passed`
+- `.venv\Scripts\python.exe -m ruff check backend scripts` 通过
+- `cd frontend && npm run build` 通过
+- `cd frontend && npx playwright test --list` 通过，当前发现 `5` 个 E2E 用例
+
+当前注意事项：
+
+- 当前 `.env` 含真实 bootstrap 管理员密码，不要提交 `.env`。
+- 最后一轮未完整跑 Playwright E2E，因为当前 E2E 会写真实开发库；为避免污染用户刚创建的普通账号，只做了测试清单解析。
+- 如果要让正在运行的服务加载新认证逻辑和 `.env`，需要重启服务：
+
+```bat
+scripts\stop-dev.bat
+scripts\start-dev.bat
+```
+
+下次优先任务：
+
+1. 将 Playwright E2E 切到独立测试库，或在测试前后自动 reset，避免污染开发库。
+2. 管理员后台继续拆分 API 路径，例如迁到 `/api/admin/...`。
+3. 做用户管理页：查看用户、启停用户、设置/取消管理员。
 
 ## 最近交接记录：2026-06-23
 

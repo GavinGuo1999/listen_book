@@ -44,8 +44,9 @@ def test_generate_sentence_audio_creates_ready_asset_and_serves_file(
     fake_tts: FakeTTSProvider,
 ) -> None:
     _book, sentence = create_ready_book(db_session)
+    headers = auth_headers(register_user(client))
 
-    response = client.post(f"/api/audio/sentences/{sentence.id}")
+    response = client.post(f"/api/audio/sentences/{sentence.id}", headers=headers)
 
     assert response.status_code == 200
     payload = response.json()
@@ -55,12 +56,12 @@ def test_generate_sentence_audio_creates_ready_asset_and_serves_file(
     assert payload["duration_ms"] == 1234
     assert fake_tts.calls == 1
 
-    file_response = client.get(payload["audio_url"])
+    file_response = client.get(payload["audio_url"], headers=headers)
     assert file_response.status_code == 200
     assert file_response.headers["content-type"] == "audio/mpeg"
     assert file_response.content == b"fake mp3 bytes"
 
-    cached_response = client.post(f"/api/audio/sentences/{sentence.id}")
+    cached_response = client.post(f"/api/audio/sentences/{sentence.id}", headers=headers)
     assert cached_response.status_code == 200
     assert cached_response.json()["id"] == payload["id"]
     assert fake_tts.calls == 1
@@ -71,7 +72,8 @@ def test_generate_sentence_audio_validates_missing_sentence(
     fake_tts: FakeTTSProvider,
 ) -> None:
     missing_sentence_id = uuid4()
-    response = client.post(f"/api/audio/sentences/{missing_sentence_id}")
+    headers = auth_headers(register_user(client))
+    response = client.post(f"/api/audio/sentences/{missing_sentence_id}", headers=headers)
 
     assert response.status_code == 404
     assert response.json()["detail"] == f"Sentence not found: {missing_sentence_id}"
@@ -84,10 +86,11 @@ def test_generate_sentence_audio_marks_asset_failed_when_provider_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _book, sentence = create_ready_book(db_session)
+    headers = auth_headers(register_user(client))
     failing_provider = FakeTTSProvider(should_fail=True)
     monkeypatch.setattr("app.services.audio.default_tts_provider", failing_provider)
 
-    response = client.post(f"/api/audio/sentences/{sentence.id}")
+    response = client.post(f"/api/audio/sentences/{sentence.id}", headers=headers)
 
     assert response.status_code == 502
     assert response.json()["detail"] == "TTS generation failed: fake provider failure"
@@ -99,7 +102,7 @@ def test_generate_sentence_audio_marks_asset_failed_when_provider_fails(
 
     working_provider = FakeTTSProvider()
     monkeypatch.setattr("app.services.audio.default_tts_provider", working_provider)
-    retry_response = client.post(f"/api/audio/sentences/{sentence.id}")
+    retry_response = client.post(f"/api/audio/sentences/{sentence.id}", headers=headers)
 
     assert retry_response.status_code == 200
     assert retry_response.json()["status"] == AudioStatus.READY.value
@@ -114,6 +117,7 @@ def test_prefetch_queues_pending_audio_and_status_reports_it(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _book, sentence = create_ready_book(db_session)
+    headers = auth_headers(register_user(client))
     queued_sentence_ids: list[str] = []
 
     def fake_background_job(sentence_id):
@@ -123,6 +127,7 @@ def test_prefetch_queues_pending_audio_and_status_reports_it(
 
     response = client.post(
         "/api/audio/sentences/prefetch",
+        headers=headers,
         json={"sentence_ids": [str(sentence.id)]},
     )
 
@@ -137,6 +142,7 @@ def test_prefetch_queues_pending_audio_and_status_reports_it(
 
     status_response = client.post(
         "/api/audio/sentences/status",
+        headers=headers,
         json={"sentence_ids": [str(sentence.id)]},
     )
 
@@ -149,13 +155,16 @@ def test_prefetch_and_status_validate_missing_sentence(
     fake_tts: FakeTTSProvider,
 ) -> None:
     missing_sentence_id = uuid4()
+    headers = auth_headers(register_user(client))
 
     prefetch_response = client.post(
         "/api/audio/sentences/prefetch",
+        headers=headers,
         json={"sentence_ids": [str(missing_sentence_id)]},
     )
     status_response = client.post(
         "/api/audio/sentences/status",
+        headers=headers,
         json={"sentence_ids": [str(missing_sentence_id)]},
     )
 
@@ -172,6 +181,7 @@ def test_audio_file_endpoint_rejects_unready_missing_and_outside_storage_assets(
     fake_tts: FakeTTSProvider,
     tmp_path: Path,
 ) -> None:
+    headers = auth_headers(register_user(client))
     _book, pending_sentence = create_ready_book(db_session, title="Pending Audio")
     pending_asset = AudioAsset(
         sentence_id=pending_sentence.id,
@@ -185,7 +195,7 @@ def test_audio_file_endpoint_rejects_unready_missing_and_outside_storage_assets(
     db_session.add(pending_asset)
     db_session.commit()
 
-    pending_response = client.get(f"/api/audio/assets/{pending_asset.id}/file")
+    pending_response = client.get(f"/api/audio/assets/{pending_asset.id}/file", headers=headers)
     assert pending_response.status_code == 409
 
     _book, missing_sentence = create_ready_book(db_session, title="Missing Audio File")
@@ -195,7 +205,10 @@ def test_audio_file_endpoint_rejects_unready_missing_and_outside_storage_assets(
         fake_tts,
         storage_path=str(settings.audio_dir / "missing.mp3"),
     )
-    missing_response = client.get(f"/api/audio/assets/{missing_path_asset.id}/file")
+    missing_response = client.get(
+        f"/api/audio/assets/{missing_path_asset.id}/file",
+        headers=headers,
+    )
     assert missing_response.status_code == 404
 
     _book, outside_sentence = create_ready_book(db_session, title="Outside Audio File")
@@ -207,10 +220,10 @@ def test_audio_file_endpoint_rejects_unready_missing_and_outside_storage_assets(
         fake_tts,
         storage_path=str(outside_path),
     )
-    outside_response = client.get(f"/api/audio/assets/{outside_asset.id}/file")
+    outside_response = client.get(f"/api/audio/assets/{outside_asset.id}/file", headers=headers)
     assert outside_response.status_code == 404
 
-    not_found_response = client.get(f"/api/audio/assets/{uuid4()}/file")
+    not_found_response = client.get(f"/api/audio/assets/{uuid4()}/file", headers=headers)
     assert not_found_response.status_code == 404
 
 
@@ -261,3 +274,16 @@ def make_audio_asset(
     db_session.commit()
     db_session.refresh(asset)
     return asset
+
+
+def register_user(client: TestClient, username: str = "audio-reader") -> str:
+    response = client.post(
+        "/api/auth/register",
+        json={"username": username, "password": "secret123"},
+    )
+    assert response.status_code == 201
+    return response.json()["access_token"]
+
+
+def auth_headers(token: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {token}"}

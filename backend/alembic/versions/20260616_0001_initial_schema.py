@@ -8,8 +8,9 @@ Create Date: 2026-06-16
 from collections.abc import Sequence
 
 import sqlalchemy as sa
-from alembic import op
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 revision: str = "20260616_0001"
 down_revision: str | None = None
@@ -147,7 +148,12 @@ def upgrade() -> None:
             "text_hash",
         ),
     )
-    op.create_index(op.f("ix_audio_assets_sentence_id"), "audio_assets", ["sentence_id"], unique=False)
+    op.create_index(
+        op.f("ix_audio_assets_sentence_id"),
+        "audio_assets",
+        ["sentence_id"],
+        unique=False,
+    )
     op.create_index(op.f("ix_audio_assets_status"), "audio_assets", ["status"], unique=False)
     op.create_index(op.f("ix_audio_assets_text_hash"), "audio_assets", ["text_hash"], unique=False)
 

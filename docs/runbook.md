@@ -152,11 +152,19 @@ Playwright 配置：`frontend/playwright.config.ts`
 
 ## 公共书库与审批
 
-- 默认本地用户 `local` 是管理员，用于本地单机/开发体验。
-- 第一个正式注册用户会自动成为管理员。
+- 未登录用户只能访问登录/注册页，不能访问书库、上传、音频、进度或审批 API。
+- 管理员账号由 `.env` 显式配置：
+
+```text
+LISTEN_BOOK_BOOTSTRAP_ADMIN_USERNAME=admin
+LISTEN_BOOK_BOOTSTRAP_ADMIN_PASSWORD=change-me-admin-password
+```
+
+- 服务启动时会确保该账号存在、启用且拥有管理员权限；普通注册用户不会自动成为管理员。
+- 管理员后台入口是 `/admin`，普通用户访问会回到普通书库页。
 - 管理员上传 TXT/EPUB 后自动发布到公共书库。
 - 普通用户上传 TXT/EPUB 后默认进入 `pending_review`，只有上传者本人和管理员可见。
-- 管理员可在前端独立“审核中心”里集中处理上传，也可在书库行点击“批准/拒绝”。
+- 管理员可在前端独立“审核中心”里集中处理上传。
 - 审核中心支持：
   - 待审批、解析失败、已拒绝、全部筛选
   - 分页

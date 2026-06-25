@@ -9,32 +9,37 @@ import type {
   User
 } from "./types";
 
-const AUTH_TOKEN_KEY = "listen_book_auth_token";
-
-export function getStoredAuthToken(): string | null {
-  return window.localStorage.getItem(AUTH_TOKEN_KEY);
-}
-
-export function setStoredAuthToken(token: string | null) {
-  if (token) {
-    window.localStorage.setItem(AUTH_TOKEN_KEY, token);
-  } else {
-    window.localStorage.removeItem(AUTH_TOKEN_KEY);
-  }
-}
-
 async function apiFetch(input: RequestInfo | URL, init: RequestInit = {}) {
   const headers = new Headers(init.headers);
-  const token = getStoredAuthToken();
-  if (token) {
-    headers.set("Authorization", `Bearer ${token}`);
-  }
-  return fetch(input, { ...init, headers });
+  return fetch(input, { ...init, credentials: "same-origin", headers });
 }
 
 async function readError(response: Response, fallback: string) {
   const message = await response.text();
-  return message || fallback;
+  if (!message) {
+    return fallback;
+  }
+
+  try {
+    const payload = JSON.parse(message) as { detail?: unknown };
+    if (typeof payload.detail === "string") {
+      return payload.detail;
+    }
+    if (Array.isArray(payload.detail)) {
+      return payload.detail
+        .map((item) => {
+          if (item && typeof item === "object" && "msg" in item) {
+            return String(item.msg);
+          }
+          return String(item);
+        })
+        .join("；");
+    }
+  } catch {
+    // Fall back to raw text below.
+  }
+
+  return message;
 }
 
 export async function fetchCurrentUser(): Promise<User> {
@@ -47,8 +52,7 @@ export async function fetchCurrentUser(): Promise<User> {
 
 export async function registerUser(
   username: string,
-  password: string,
-  displayName?: string
+  password: string
 ): Promise<AuthResponse> {
   const response = await apiFetch("/api/auth/register", {
     method: "POST",
@@ -57,8 +61,7 @@ export async function registerUser(
     },
     body: JSON.stringify({
       username,
-      password,
-      display_name: displayName || null
+      password
     })
   });
   if (!response.ok) {
@@ -79,6 +82,15 @@ export async function loginUser(username: string, password: string): Promise<Aut
     throw new Error(await readError(response, "Failed to login"));
   }
   return response.json();
+}
+
+export async function logoutUser(): Promise<void> {
+  const response = await apiFetch("/api/auth/logout", {
+    method: "POST"
+  });
+  if (!response.ok) {
+    throw new Error(await readError(response, "Failed to logout"));
+  }
 }
 
 export async function fetchBooks(): Promise<BookSummary[]> {

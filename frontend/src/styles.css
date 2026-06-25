@@ -20,6 +20,44 @@ button {
   font: inherit;
 }
 
+.login-shell {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  background:
+    radial-gradient(circle at 20% 20%, #dcefe7 0, transparent 34%),
+    linear-gradient(135deg, #f8faf7 0%, #eef3ef 100%);
+  padding: 24px;
+}
+
+.login-card {
+  display: flex;
+  width: min(420px, 100%);
+  flex-direction: column;
+  gap: 18px;
+  border: 1px solid #d8ddd6;
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 24px 70px rgb(30 36 33 / 14%);
+  padding: 28px;
+}
+
+.login-card > p {
+  margin: 0;
+  color: #647067;
+}
+
+.login-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.login-brand h1 {
+  margin: 2px 0 0;
+  font-size: 26px;
+}
+
 .app-shell {
   display: grid;
   grid-template-columns: 320px 1fr;
@@ -101,6 +139,27 @@ button {
 .account-current button:hover {
   background: #f0f2ee;
   color: #202124;
+}
+
+.side-nav {
+  display: grid;
+  gap: 8px;
+}
+
+.side-nav button {
+  min-height: 38px;
+  border: 1px solid #c9d0c8;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #38413b;
+  cursor: pointer;
+  font-weight: 650;
+}
+
+.side-nav button.active {
+  border-color: #196b69;
+  background: #196b69;
+  color: #ffffff;
 }
 
 .auth-form {
@@ -571,6 +630,30 @@ button {
   flex-direction: column;
   min-width: 0;
   min-height: 100vh;
+}
+
+.admin-panel {
+  display: flex;
+  min-width: 0;
+  min-height: 100vh;
+  flex-direction: column;
+}
+
+.admin-content {
+  width: min(980px, 100%);
+  padding: 28px;
+}
+
+.admin-content .review-queue-card {
+  gap: 14px;
+}
+
+.admin-content .review-filter-tabs {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.admin-content .review-queue-list {
+  gap: 12px;
 }
 
 .reader-header {
