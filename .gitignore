@@ -17,6 +17,8 @@ test-results/
 storage/uploads/*
 storage/parsed/*
 storage/audio/*
+storage/e2e/*
 !storage/uploads/.gitkeep
 !storage/parsed/.gitkeep
 !storage/audio/.gitkeep
+!storage/e2e/.gitkeep

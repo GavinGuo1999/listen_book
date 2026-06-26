@@ -7,7 +7,11 @@ import {
 } from "@playwright/test";
 
 const SESSION_COOKIE_NAME = "listen_book_session";
-const APP_URL = "http://127.0.0.1:5173";
+const APP_URL = "http://127.0.0.1:5174";
+const E2E_ADMIN = {
+  username: "admin",
+  password: "e2e-admin-password",
+};
 
 function e2eBookName() {
   const title = `e2e-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -43,15 +47,28 @@ async function registerUserViaApi(request: APIRequestContext, user: ReturnType<t
   }>;
 }
 
+async function loginUserViaApi(
+  request: APIRequestContext,
+  user: Pick<ReturnType<typeof e2eUser>, "username" | "password">
+) {
+  const response = await request.post("/api/auth/login", {
+    data: {
+      username: user.username,
+      password: user.password,
+    },
+  });
+  expect(response.status()).toBe(200);
+  return response.json() as Promise<{
+    access_token: string;
+    user: { is_admin: boolean; username: string };
+  }>;
+}
+
 async function registerRegularUserViaApi(request: APIRequestContext) {
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const user = e2eUser();
-    const auth = await registerUserViaApi(request, user);
-    if (!auth.user.is_admin) {
-      return user;
-    }
-  }
-  throw new Error("Failed to create a regular non-admin user");
+  const user = e2eUser();
+  const auth = await registerUserViaApi(request, user);
+  expect(auth.user.is_admin).toBe(false);
+  return user;
 }
 
 async function useAuthCookie(page: Page, token: string | null) {
@@ -225,10 +242,8 @@ test.describe("Listen Book browser flow", () => {
   test("queues normal user uploads for admin approval", async ({ page, request }) => {
     const { fileName, title } = e2eBookName();
 
-    const admin = e2eUser();
-    const adminAuth = await registerUserViaApi(request, admin);
-    test.skip(!adminAuth.user.is_admin, "No admin bootstrap account is available in this DB");
-
+    const adminAuth = await loginUserViaApi(request, E2E_ADMIN);
+    expect(adminAuth.user.is_admin).toBe(true);
     const uploader = await registerRegularUserViaApi(request);
     const otherReader = await registerRegularUserViaApi(request);
 

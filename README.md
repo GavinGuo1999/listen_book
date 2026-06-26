@@ -143,4 +143,10 @@ cd D:\listen_book\frontend
 npm run test:e2e
 ```
 
+该命令会使用独立 PostgreSQL 测试库 `listen_book_e2e` 和 `storage/e2e`，并临时启动测试后端到 `127.0.0.1:8001`、测试前端到 `127.0.0.1:5174`；不会清空或写入真实开发库。首次运行前如果应用数据库用户没有建库权限，需要用 PostgreSQL 管理员执行：
+
+```sql
+CREATE DATABASE listen_book_e2e OWNER listen_book_app;
+```
+
 更多运行和排错步骤见 [docs/runbook.md](docs/runbook.md)。

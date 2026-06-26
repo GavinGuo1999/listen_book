@@ -130,7 +130,25 @@ cd D:\listen_book
 
 Playwright E2E 测试覆盖注册/登录/退出、上传、解析等待、阅读进度恢复、删除、普通用户上传待审、管理员审核中心批准、审批历史展示和批准后公共可见等关键路径。当前脚本刻意不触发真实 TTS，避免 E2E 依赖外部网络。
 
-运行前提：后端服务已在 `http://127.0.0.1:8000` 运行。
+运行前提：本机 PostgreSQL 可访问，且应用数据库用户有权限创建或访问测试库 `listen_book_e2e`。
+
+E2E 运行时会：
+
+- 使用独立数据库 `listen_book_e2e`
+- 使用独立存储目录 `storage/e2e`
+- 测试前执行迁移并清空测试库
+- bootstrap 测试管理员 `admin`
+- 临时启动测试后端到 `http://127.0.0.1:8001`
+- 临时启动测试前端到 `http://127.0.0.1:5174`
+- 让测试前端 dev server 代理 `/api` 到测试后端
+
+因此 E2E 不需要真实开发后端 `127.0.0.1:8000` 或真实开发前端 `127.0.0.1:5173`，也不会清空或写入真实开发库。
+
+如果应用数据库用户没有建库权限，首次运行前用 PostgreSQL 管理员创建测试库：
+
+```sql
+CREATE DATABASE listen_book_e2e OWNER listen_book_app;
+```
 
 ```powershell
 cd D:\listen_book\frontend
@@ -148,7 +166,7 @@ npx playwright test e2e/books.spec.ts
 测试文件：`frontend/e2e/books.spec.ts`
 Playwright 配置：`frontend/playwright.config.ts`
 
-注意：E2E 测试会复用已运行的前端 dev server；如果前端未运行，Playwright 会临时启动一个测试用 dev server。后端服务仍需提前手动启动。
+注意：Playwright 会使用 8001/5174 端口启动测试服务。如果端口被占用，先停止占用进程再运行 E2E。
 
 ## 公共书库与审批
 
