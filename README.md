@@ -59,7 +59,7 @@ npm install --no-audit --no-fund
 执行数据库迁移：
 
 ```powershell
-cd D:\listen_book\backend
+cd D:\Projects\listen_book\backend
 ..\.venv\Scripts\alembic.exe upgrade head
 ```
 
@@ -111,35 +111,35 @@ GRANT ALL PRIVILEGES ON DATABASE listen_book TO listen_book_app;
 前端构建：
 
 ```powershell
-cd D:\listen_book\frontend
+cd D:\Projects\listen_book\frontend
 npm run build
 ```
 
 后端测试：
 
 ```powershell
-cd D:\listen_book
+cd D:\Projects\listen_book
 .venv\Scripts\python.exe -m pytest backend\tests -q
 ```
 
 后端 lint：
 
 ```powershell
-cd D:\listen_book
+cd D:\Projects\listen_book
 .venv\Scripts\ruff.exe check --no-cache backend\app backend\tests scripts\smoke_api.py
 ```
 
 服务启动后的 API smoke：
 
 ```powershell
-cd D:\listen_book
+cd D:\Projects\listen_book
 .venv\Scripts\python.exe scripts\smoke_api.py
 ```
 
 浏览器 E2E：
 
 ```powershell
-cd D:\listen_book\frontend
+cd D:\Projects\listen_book\frontend
 npm run test:e2e
 ```
 

@@ -99,6 +99,7 @@ Get-Content -Path docs\PROJECT_MEMORY.md -Encoding UTF8
   - “低声/轻声/喃喃”等轻声标记降低音高，“大声/喊道/怒道”等强情绪标记提高音高
 - 登录/注册浏览器 E2E 脚本已补：注册、退出、重新登录
 - 浏览器 E2E 已覆盖审批路径：普通用户上传待审、其他用户不可见、本地管理员待审批列表批准、批准后其他用户可见
+- 浏览器 E2E 已隔离到独立 PostgreSQL 测试库 `listen_book_e2e` 和 `storage/e2e`，不再写入真实开发库
 - 服务启动后的 API smoke 脚本：`scripts/smoke_api.py`
 - Windows 启停脚本：`scripts\start-dev.bat`、`scripts\stop-dev.bat`
 - 开发库重置脚本：`scripts/reset_dev_data.py`，会清理业务数据和 storage，并按 `.env` 重建 bootstrap 管理员
@@ -106,9 +107,26 @@ Get-Content -Path docs\PROJECT_MEMORY.md -Encoding UTF8
 当前主要未完成：
 
 - 更完整的管理员后台体验：批量审批、复杂筛选、后台权限分层等
-- Playwright E2E 目前仍会写真实开发库；建议后续改为独立测试库或自动清理
 - PDF 解析暂不做；当前上传格式明确收敛为 TXT/EPUB
 - 更自然的小说朗读：真正的多角色音色分配、按章节/角色学习风格
+
+## 最近交接记录：2026-07-03
+
+今天整理：
+
+- 确认最新提交 `240251b test: isolate playwright e2e environment` 已将 Playwright E2E 切到独立测试环境：
+  - PostgreSQL 测试库：`listen_book_e2e`
+  - 测试 storage：`storage/e2e`
+  - 测试后端：`127.0.0.1:8001`
+  - 测试前端：`127.0.0.1:5174`
+- 修正 README 和 runbook 里的本机项目路径，从 `D:\listen_book` 更新为 `D:\Projects\listen_book`。
+- 当前 `.env` 仍包含真实本地 bootstrap 管理员密码，不要提交 `.env`。
+
+下一步优先任务：
+
+1. 管理员后台继续增强：批量审批、复杂筛选、后台权限分层。
+2. 做用户管理页：查看用户、启停用户、设置/取消管理员。
+3. 管理员 API 路径后续可逐步迁到 `/api/admin/...`。
 
 ## 最近交接记录：2026-06-25
 
@@ -147,7 +165,7 @@ Get-Content -Path docs\PROJECT_MEMORY.md -Encoding UTF8
 当前注意事项：
 
 - 当前 `.env` 含真实 bootstrap 管理员密码，不要提交 `.env`。
-- 最后一轮未完整跑 Playwright E2E，因为当前 E2E 会写真实开发库；为避免污染用户刚创建的普通账号，只做了测试清单解析。
+- 这一天最后未完整跑 Playwright E2E，因为当时 E2E 仍会写真实开发库；该问题已在后续提交 `240251b` 中修复。
 - 如果要让正在运行的服务加载新认证逻辑和 `.env`，需要重启服务：
 
 ```bat
@@ -157,9 +175,8 @@ scripts\start-dev.bat
 
 下次优先任务：
 
-1. 将 Playwright E2E 切到独立测试库，或在测试前后自动 reset，避免污染开发库。
-2. 管理员后台继续拆分 API 路径，例如迁到 `/api/admin/...`。
-3. 做用户管理页：查看用户、启停用户、设置/取消管理员。
+1. 管理员后台继续拆分 API 路径，例如迁到 `/api/admin/...`。
+2. 做用户管理页：查看用户、启停用户、设置/取消管理员。
 
 ## 最近交接记录：2026-06-23
 

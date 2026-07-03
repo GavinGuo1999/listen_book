@@ -16,28 +16,28 @@ scripts\start-dev.bat
 创建 `.env`：
 
 ```powershell
-cd D:\listen_book
+cd D:\Projects\listen_book
 Copy-Item .env.example .env
 ```
 
 安装后端依赖：
 
 ```powershell
-cd D:\listen_book
+cd D:\Projects\listen_book
 .venv\Scripts\python.exe -m pip install --no-cache-dir -e backend[dev]
 ```
 
 安装前端依赖：
 
 ```powershell
-cd D:\listen_book\frontend
+cd D:\Projects\listen_book\frontend
 npm install --no-audit --no-fund
 ```
 
 执行数据库迁移：
 
 ```powershell
-cd D:\listen_book\backend
+cd D:\Projects\listen_book\backend
 ..\.venv\Scripts\alembic.exe upgrade head
 ```
 
@@ -54,14 +54,14 @@ scripts\start-dev.bat
 手动启动后端：
 
 ```powershell
-cd D:\listen_book\backend
+cd D:\Projects\listen_book\backend
 ..\.venv\Scripts\uvicorn.exe app.main:app --host 127.0.0.1 --port 8000
 ```
 
 手动启动前端：
 
 ```powershell
-cd D:\listen_book\frontend
+cd D:\Projects\listen_book\frontend
 npm run dev -- --host 127.0.0.1
 ```
 
@@ -90,28 +90,28 @@ http://127.0.0.1:5173/
 前端构建：
 
 ```powershell
-cd D:\listen_book\frontend
+cd D:\Projects\listen_book\frontend
 npm run build
 ```
 
 后端测试：
 
 ```powershell
-cd D:\listen_book
+cd D:\Projects\listen_book
 .venv\Scripts\python.exe -m pytest backend\tests -q
 ```
 
 后端 lint：
 
 ```powershell
-cd D:\listen_book
+cd D:\Projects\listen_book
 .venv\Scripts\ruff.exe check --no-cache backend\app backend\tests scripts\smoke_api.py
 ```
 
 服务启动后的 API smoke：
 
 ```powershell
-cd D:\listen_book
+cd D:\Projects\listen_book
 .venv\Scripts\python.exe scripts\smoke_api.py
 ```
 
@@ -151,7 +151,7 @@ CREATE DATABASE listen_book_e2e OWNER listen_book_app;
 ```
 
 ```powershell
-cd D:\listen_book\frontend
+cd D:\Projects\listen_book\frontend
 
 # headless 运行（CI / 快速验证）
 npm run test:e2e
@@ -231,7 +231,7 @@ GET /api/books/admin/reviews
 上传接口会通过 FastAPI `BackgroundTasks` 自动触发一次解析。如果存在 pending parse job 需要手动重试：
 
 ```powershell
-cd D:\listen_book
+cd D:\Projects\listen_book
 .venv\Scripts\python.exe -m app.workers.parse_books
 ```
 
