@@ -13,6 +13,7 @@ dist/
 *.tsbuildinfo
 playwright-report/
 test-results/
+.playwright-mcp/
 
 storage/uploads/*
 storage/parsed/*

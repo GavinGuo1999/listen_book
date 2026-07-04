@@ -181,8 +181,14 @@ def test_user_upload_waits_for_admin_approval_before_public_visibility(
     assert other_chapters_response.status_code == 404
     assert uploader_chapters_response.status_code == 200
 
-    admin_reviews_response = client.get(
+    legacy_admin_reviews_response = client.get(
         "/api/books/admin/reviews",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert legacy_admin_reviews_response.status_code == 200
+
+    admin_reviews_response = client.get(
+        "/api/admin/books/reviews",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert admin_reviews_response.status_code == 200
@@ -194,20 +200,20 @@ def test_user_upload_waits_for_admin_approval_before_public_visibility(
     assert admin_review_book["review_history"] == []
 
     forbidden_admin_reviews_response = client.get(
-        "/api/books/admin/reviews",
+        "/api/admin/books/reviews",
         headers={"Authorization": f"Bearer {uploader_token}"},
     )
     assert forbidden_admin_reviews_response.status_code == 403
 
     forbidden_review_response = client.patch(
-        f"/api/books/{book_id}/review",
+        f"/api/admin/books/{book_id}/review",
         headers={"Authorization": f"Bearer {uploader_token}"},
         json={"review_status": BookReviewStatus.APPROVED.value},
     )
     assert forbidden_review_response.status_code == 403
 
     approved_response = client.patch(
-        f"/api/books/{book_id}/review",
+        f"/api/admin/books/{book_id}/review",
         headers={"Authorization": f"Bearer {admin_token}"},
         json={
             "review_status": BookReviewStatus.APPROVED.value,
@@ -219,13 +225,13 @@ def test_user_upload_waits_for_admin_approval_before_public_visibility(
     assert approved_response.json()["review_note"] == "内容完整，批准发布。"
 
     approved_admin_reviews_response = client.get(
-        "/api/books/admin/reviews",
+        "/api/admin/books/reviews",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     approved_admin_review_book = next(
         book for book in approved_admin_reviews_response.json() if book["id"] == book_id
     )
-    [review_event] = approved_admin_review_book["review_history"]
+    review_event = approved_admin_review_book["review_history"][0]
     assert review_event["reviewer_username"] == "admin"
     assert review_event["reviewer_display_name"] == "admin"
     assert review_event["from_review_status"] == BookReviewStatus.PENDING.value

@@ -193,7 +193,8 @@ LISTEN_BOOK_BOOTSTRAP_ADMIN_PASSWORD=change-me-admin-password
 - 也可直接调用：
 
 ```http
-PATCH /api/books/{book_id}/review
+GET /api/admin/books/reviews
+PATCH /api/admin/books/{book_id}/review
 ```
 
 请求体示例：
@@ -207,13 +208,14 @@ PATCH /api/books/{book_id}/review
 
 当前支持上传格式为 TXT/EPUB；PDF 暂不接入。
 
-管理员审计列表接口：
+旧接口暂保留兼容，但新代码优先使用 `/api/admin/...`：
 
 ```http
 GET /api/books/admin/reviews
+PATCH /api/books/{book_id}/review
 ```
 
-该接口仅管理员可用，返回上传者信息和 `review_history`。
+管理员审计列表接口仅管理员可用，返回上传者信息和 `review_history`。
 
 ## 朗读语气
 
@@ -225,6 +227,7 @@ GET /api/books/admin/reviews
   - 省略号/破折号进一步放慢。
   - “低声/轻声/喃喃”等轻声标记放低音高，“大声/喊道/怒道”等强情绪标记提高音高。
 - 这仍是轻量规则；尚未实现按角色分配不同音色。
+- 固定评测样例位于 `samples/tts_golden/`，评分口径见 `docs/tts-evaluation.md`。调整 TTS 或切句规则后，优先用这组样例听测，避免凭感觉反复改规则。
 
 ## 手动 worker 兜底
 

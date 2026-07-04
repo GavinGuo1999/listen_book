@@ -1,8 +1,8 @@
 # Listen Book
 
-家庭读书/听书 Web 应用。
+家庭读书/听书 Web 应用，当前定位为 `v0.3-local-mvp`：面向本地自用和家庭局域网使用，优先保证上传、解析、朗读、缓存、进度恢复、登录和管理员审核这条主流程稳定。
 
-当前已完成本地听书 MVP 和登录/多用户进度隔离最小闭环：
+## 当前能做什么
 
 - TXT/EPUB 上传、解析、断句
 - 书库和阅读页
@@ -26,7 +26,23 @@
   - 普通用户只看到已发布书籍和自己上传的待审/拒绝书籍
 - 小说朗读语气基础优化：按对白、长句、感叹、省略号和轻声/喊话等特征调整 Edge TTS 语速/音高
 
-当前仍未实现：PDF 解析、批量审批/复杂后台权限、真正的多角色分配朗读。
+## 当前不做什么
+
+- PDF 解析暂不接入；当前上传格式明确收敛为 TXT/EPUB。
+- 不先追求复杂 AI 讲书或多角色配音；朗读优化先用固定 golden 样例评测自然度。
+- 管理员后台目前是最小闭环；批量审批、复杂筛选、用户管理和权限分层仍属于下一阶段。
+- 后台任务仍是 MVP 形态；后续再升级为轻量 worker 扫描 pending job。
+
+## 稳定版本验收
+
+`v0.3-local-mvp` 的验收目标：
+
+1. 本地服务可稳定启动。
+2. 管理员可上传一本 TXT/EPUB 并自动发布。
+3. 普通用户上传后进入待审批，管理员可批准/拒绝并留下审计记录。
+4. 阅读页可按句播放、缓存音频、预生成章节音频。
+5. 阅读句子和音频位置可恢复。
+6. 自动化测试覆盖后端 API、TTS 规则和浏览器主流程。
 
 ## 技术栈
 
@@ -150,3 +166,10 @@ CREATE DATABASE listen_book_e2e OWNER listen_book_app;
 ```
 
 更多运行和排错步骤见 [docs/runbook.md](docs/runbook.md)。
+
+## 项目资料
+
+- 变更记录：[CHANGELOG.md](CHANGELOG.md)
+- 运行手册：[docs/runbook.md](docs/runbook.md)
+- TTS 评测说明：[docs/tts-evaluation.md](docs/tts-evaluation.md)
+- 项目交接记忆：[docs/PROJECT_MEMORY.md](docs/PROJECT_MEMORY.md)

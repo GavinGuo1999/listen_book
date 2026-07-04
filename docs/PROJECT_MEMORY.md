@@ -128,6 +128,45 @@ Get-Content -Path docs\PROJECT_MEMORY.md -Encoding UTF8
 2. 做用户管理页：查看用户、启停用户、设置/取消管理员。
 3. 管理员 API 路径后续可逐步迁到 `/api/admin/...`。
 
+## 最近交接记录：2026-07-04
+
+本轮按静态审查建议完成：
+
+- 将项目文档定位为 `v0.3-local-mvp`，补充当前能做什么、当前不做什么和稳定版本验收口径。
+- 新增 `CHANGELOG.md`，记录 v0.3 本地 MVP 能力和下一阶段候选任务。
+- 管理员接口开始迁到独立命名空间：
+  - 新增 `GET /api/admin/books/reviews`
+  - 新增 `PATCH /api/admin/books/{book_id}/review`
+  - 旧 `GET /api/books/admin/reviews` 和 `PATCH /api/books/{book_id}/review` 仍保留兼容
+  - 前端 API 调用已切到 `/api/admin/...`
+- 切句器从单一正则升级为小型扫描器：
+  - 保持中文句号、问号、叹号和引号处理
+  - 新增英文句号切分
+  - 避免在 `Mr.`、`p.m.`、`a.m.`、`e.g.`、`i.e.` 等常见缩写中误切
+- 新增切句黄金测试集 `backend/tests/test_text_splitter.py`。
+- 新增 TTS golden 文本样例：
+  - `samples/tts_golden/chinese_dialogue.txt`
+  - `samples/tts_golden/chinese_narration.txt`
+  - `samples/tts_golden/english_narration.txt`
+  - `samples/tts_golden/mixed_symbols.txt`
+- 新增 `docs/tts-evaluation.md`，记录自然度、断句、对白感、速度和奇怪停顿的 1-5 分评测表。
+- `.gitignore` 新增 `.playwright-mcp/`，避免浏览器工具临时文件污染工作区。
+
+本轮验证：
+
+- 重新运行 `.venv\Scripts\python.exe -m pip install --no-cache-dir -e backend[dev]`，修正本机 editable install 仍指向旧路径 `D:\listen_book\backend` 的问题。
+- `.venv\Scripts\python.exe -m pytest backend\tests -q` 通过，当前为 `29 passed`。
+- `.venv\Scripts\ruff.exe check --no-cache backend\app backend\tests scripts\smoke_api.py` 通过。
+- `cd frontend && npm run build` 通过。
+- `cd frontend && npm run test:e2e` 未跑起：本机缺少 PostgreSQL 测试库 `listen_book_e2e`，需先用管理员执行 `CREATE DATABASE "listen_book_e2e" OWNER listen_book_app;`。
+- `git diff --check` 通过，仅有 Windows 换行提示。
+
+下一步优先任务：
+
+1. 拆前端 `App.tsx`，优先抽 `useAuth`、`useBooks`、`useAdminReview` 和页面组件。
+2. 做用户管理页：查看用户、启停用户、设置/取消管理员。
+3. 设计轻量 worker：扫描 pending job，统一处理解析、音频生成和章节预生成。
+
 ## 最近交接记录：2026-06-25
 
 今天完成：

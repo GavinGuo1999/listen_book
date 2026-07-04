@@ -102,7 +102,7 @@ export async function fetchBooks(): Promise<BookSummary[]> {
 }
 
 export async function fetchAdminBookReviews(): Promise<AdminBookReviewSummary[]> {
-  const response = await apiFetch("/api/books/admin/reviews");
+  const response = await apiFetch("/api/admin/books/reviews");
   if (!response.ok) {
     throw new Error(await readError(response, "Failed to load admin review books"));
   }
@@ -137,7 +137,7 @@ export async function reviewBook(
   reviewStatus: "approved" | "rejected" | "pending_review",
   reviewNote?: string
 ): Promise<BookSummary> {
-  const response = await apiFetch(`/api/books/${bookId}/review`, {
+  const response = await apiFetch(`/api/admin/books/${bookId}/review`, {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json"
