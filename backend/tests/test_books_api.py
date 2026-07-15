@@ -118,8 +118,8 @@ def test_upload_epub_parses_spine_chapters_to_ready(
         for paragraph in chapters[1]["paragraphs"]
         for sentence in paragraph["sentences"]
     ]
-    assert first_chapter_sentences == ["第一章", "第一句。", "第二句？"]
-    assert second_chapter_sentences == ["第二章", "第三句！"]
+    assert first_chapter_sentences == ["第一句。", "第二句？"]
+    assert second_chapter_sentences == ["第三句！"]
 
 
 def test_upload_invalid_epub_marks_book_failed(client: TestClient, db_session: Session) -> None:

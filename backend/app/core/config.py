@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     bootstrap_admin_username: str | None = None
     bootstrap_admin_password: str | None = None
     storage_root: Path = Field(default=PROJECT_ROOT / "storage")
+    job_retention_days: int = Field(default=30, ge=1)
+    job_cleanup_interval_seconds: int = Field(default=3600, ge=60)
     cors_origins_raw: str = Field(
         default="http://localhost:5173,http://127.0.0.1:5173",
         validation_alias="LISTEN_BOOK_CORS_ORIGINS",

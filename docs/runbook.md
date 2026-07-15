@@ -253,6 +253,22 @@ cd D:\Projects\listen_book\backend
 - 失败任务最多自动尝试 3 次，按指数退避等待。
 - 运行超过 5 分钟仍未完成的任务会被视为 worker 中断并重新入队。
 - 最终失败任务可在 `/admin` 的任务中心查看并手动重试。
+- 成功任务默认保留 30 天，worker 每小时执行一次清理；失败任务不会自动删除。
+
+可在 `.env` 调整保留天数和清理周期：
+
+```text
+LISTEN_BOOK_JOB_RETENTION_DAYS=30
+LISTEN_BOOK_JOB_CLEANUP_INTERVAL_SECONDS=3600
+```
+
+## EPUB 解析
+
+- 按 OPF spine 顺序生成章节，跳过 `linear="no"` 内容和 manifest 中的导航文档。
+- 章节标题优先使用正文首个 `h1`-`h6`，其次使用 HTML `title`。
+- 已作为章节标题的首行不会重复进入朗读正文。
+- 目录、封面、版权页、脚注、尾注及脚注引用按 EPUB 语义、ARIA role 和常见 class/id 过滤。
+- 黄金夹具位于 `samples/epub_golden/semantic-book/`；回归测试是 `backend/tests/test_epub.py`。
 
 管理员任务 API：
 

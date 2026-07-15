@@ -10,10 +10,12 @@ from uuid import UUID
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.db.session import SessionLocal
 from app.models.book import Book, BookStatus, Chapter, Paragraph, Sentence
 from app.models.job import Job, JobStatus, JobType
 from app.services.audio import generate_sentence_audio_asset, queue_sentence_audio
+from app.services.jobs import cleanup_completed_jobs
 from app.workers.parse_books import parse_epub_book, parse_txt_book
 
 logger = logging.getLogger(__name__)
@@ -199,11 +201,22 @@ def run_forever(
     stop_event: threading.Event | None = None,
     *,
     poll_interval_seconds: float = DEFAULT_POLL_INTERVAL_SECONDS,
+    cleanup_interval_seconds: int | None = None,
 ) -> None:
     stop_event = stop_event or threading.Event()
+    cleanup_interval_seconds = cleanup_interval_seconds or settings.job_cleanup_interval_seconds
+    next_cleanup_at = 0.0
     logger.info("Listen Book worker started")
     while not stop_event.is_set():
         started = monotonic()
+        if started >= next_cleanup_at:
+            try:
+                deleted_count = cleanup_expired_completed_jobs()
+                if deleted_count:
+                    logger.info("Removed %s expired completed jobs", deleted_count)
+            except Exception:
+                logger.exception("Completed job cleanup failed")
+            next_cleanup_at = started + cleanup_interval_seconds
         try:
             processed = run_once()
         except Exception:
@@ -215,6 +228,11 @@ def run_forever(
         elif monotonic() - started < 0.01:
             stop_event.wait(0.01)
     logger.info("Listen Book worker stopped")
+
+
+def cleanup_expired_completed_jobs() -> int:
+    with SessionLocal() as db:
+        return cleanup_completed_jobs(db, retention_days=settings.job_retention_days)
 
 
 def main() -> None:

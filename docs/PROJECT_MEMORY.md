@@ -704,3 +704,30 @@ cd D:\listen_book
 1. 建立真实 EPUB 黄金样本库，覆盖标题、目录、脚注和版权页过滤。
 2. 增加任务保留/清理策略，避免长期运行后 done job 无限增长。
 3. 再评估用户管理、批量审核和更细权限。
+
+## 最近交接记录：2026-07-15（v0.4.1）
+
+本轮完成：
+
+- EPUB 解析器增加 manifest properties、spine linear、guide 和正文 EPUB 语义识别。
+- 章节标题优先从首个标题元素提取，并从朗读正文移除重复标题。
+- 过滤目录、封面、版权页、脚注、尾注、脚注引用和非线性 spine 内容。
+- 支持 URL 编码和带片段的 manifest href，限制单个正文文档为 10 MiB，并阻止路径越出包根目录。
+- 新增 `samples/epub_golden/semantic-book/` 可复现黄金夹具及独立回归测试。
+- worker 定期清理超过保留期的成功任务，默认保留 30 天；失败任务继续保留。
+- 新增 `LISTEN_BOOK_JOB_RETENTION_DAYS` 和 `LISTEN_BOOK_JOB_CLEANUP_INTERVAL_SECONDS` 配置。
+- 前后端及 FastAPI 版本统一升级为 `0.4.1`。
+
+本轮验证：
+
+- `.venv\Scripts\python.exe -m pytest backend\tests -q`：`37 passed`。
+- `.venv\Scripts\ruff.exe check --no-cache backend\app backend\tests scripts\smoke_api.py scripts\e2e_env.py scripts\e2e_setup.py scripts\run_e2e_backend.py scripts\run_e2e_sqlite.py`：通过。
+- `cd frontend && npm run build`：通过。
+- `cd frontend && npm run test:e2e:sqlite`：`5 passed`。
+- 本版本没有数据库结构变更，不新增 Alembic 迁移。
+
+下一阶段优先任务：
+
+1. 增加首次启动诊断，检查数据库、存储目录、默认密钥和管理员密码。
+2. 增加管理员用户管理和批量审核能力，并保持审计记录完整。
+3. 在现有 TTS golden 样例上建立可重复的主观评分记录，再继续调整朗读规则。

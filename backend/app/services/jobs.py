@@ -1,8 +1,8 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import and_, delete, or_, select
 from sqlalchemy.orm import Session
 
 from app.models.job import Job, JobStatus
@@ -69,6 +69,26 @@ def retry_job(db: Session, job_id: UUID) -> Job:
     db.commit()
     db.refresh(job)
     return job
+
+
+def cleanup_completed_jobs(
+    db: Session,
+    *,
+    retention_days: int,
+    now: datetime | None = None,
+) -> int:
+    cutoff = (now or datetime.now(UTC)) - timedelta(days=retention_days)
+    result = db.execute(
+        delete(Job).where(
+            Job.status == JobStatus.DONE.value,
+            or_(
+                Job.finished_at < cutoff,
+                and_(Job.finished_at.is_(None), Job.updated_at < cutoff),
+            ),
+        )
+    )
+    db.commit()
+    return result.rowcount or 0
 
 
 def job_target_id(job: Job) -> str | None:

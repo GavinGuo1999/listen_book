@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.models.job import Job, JobStatus, JobType
 from app.services.auth import bootstrap_admin_user
-from app.services.jobs import enqueue_job
+from app.services.jobs import cleanup_completed_jobs, enqueue_job
 from app.workers import jobs
 
 
@@ -103,6 +103,43 @@ def test_recover_stale_job_returns_it_to_queue(db_session: Session) -> None:
     assert stale_job.started_at is None
     assert stale_job.next_retry_at is not None
     assert "lease expired" in (stale_job.error_message or "")
+
+
+def test_cleanup_completed_jobs_only_removes_expired_done_jobs(db_session: Session) -> None:
+    now = datetime.now(UTC)
+    expired_done = Job(
+        job_type=JobType.GENERATE_AUDIO.value,
+        status=JobStatus.DONE.value,
+        payload={},
+        finished_at=now - timedelta(days=31),
+    )
+    legacy_expired_done = Job(
+        job_type=JobType.PARSE_BOOK.value,
+        status=JobStatus.DONE.value,
+        payload={},
+        finished_at=None,
+        updated_at=now - timedelta(days=31),
+    )
+    recent_done = Job(
+        job_type=JobType.GENERATE_AUDIO.value,
+        status=JobStatus.DONE.value,
+        payload={},
+        finished_at=now - timedelta(days=2),
+    )
+    expired_failed = Job(
+        job_type=JobType.PARSE_BOOK.value,
+        status=JobStatus.FAILED.value,
+        payload={},
+        finished_at=now - timedelta(days=90),
+    )
+    db_session.add_all([expired_done, legacy_expired_done, recent_done, expired_failed])
+    db_session.commit()
+    preserved_ids = {recent_done.id, expired_failed.id}
+
+    deleted_count = cleanup_completed_jobs(db_session, retention_days=30, now=now)
+
+    assert deleted_count == 2
+    assert {job.id for job in db_session.query(Job).all()} == preserved_ids
 
 
 def test_admin_can_list_and_retry_failed_jobs(client: TestClient, db_session: Session) -> None:
