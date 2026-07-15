@@ -19,7 +19,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 def create_app() -> FastAPI:
     settings.ensure_storage_dirs()
-    app = FastAPI(title="Listen Book API", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(title="Listen Book API", version="0.3.1", lifespan=lifespan)
 
     app.add_middleware(
         CORSMiddleware,

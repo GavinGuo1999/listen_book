@@ -1,6 +1,6 @@
 {
   "name": "listen-book-frontend",
-  "version": "0.1.0",
+  "version": "0.3.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 0.0.0.0",
     "test:e2e": "playwright test",
+    "test:e2e:sqlite": "..\\.venv\\Scripts\\python.exe ..\\scripts\\run_e2e_sqlite.py",
     "e2e:setup": "..\\.venv\\Scripts\\python.exe ..\\scripts\\e2e_setup.py",
     "e2e:backend": "..\\.venv\\Scripts\\python.exe ..\\scripts\\run_e2e_backend.py"
   },

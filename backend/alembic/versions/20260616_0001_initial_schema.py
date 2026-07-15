@@ -39,7 +39,11 @@ def upgrade() -> None:
         "jobs",
         sa.Column("job_type", sa.String(length=64), nullable=False),
         sa.Column("status", sa.String(length=32), nullable=False),
-        sa.Column("payload", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+        sa.Column(
+            "payload",
+            sa.JSON().with_variant(postgresql.JSONB(astext_type=sa.Text()), "postgresql"),
+            nullable=False,
+        ),
         sa.Column("attempts", sa.Integer(), nullable=False),
         sa.Column("error_message", sa.Text(), nullable=True),
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),

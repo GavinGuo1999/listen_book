@@ -1,6 +1,6 @@
 # Listen Book
 
-家庭读书/听书 Web 应用，当前定位为 `v0.3-local-mvp`：面向本地自用和家庭局域网使用，优先保证上传、解析、朗读、缓存、进度恢复、登录和管理员审核这条主流程稳定。
+家庭读书/听书 Web 应用，当前稳定版本为 `v0.3.1`：面向本地自用和家庭局域网使用，优先保证上传、解析、朗读、缓存、进度恢复、登录和管理员审核这条主流程稳定。
 
 ## 当前能做什么
 
@@ -35,7 +35,7 @@
 
 ## 稳定版本验收
 
-`v0.3-local-mvp` 的验收目标：
+`v0.3.1` 的验收目标：
 
 1. 本地服务可稳定启动。
 2. 管理员可上传一本 TXT/EPUB 并自动发布。
@@ -43,6 +43,8 @@
 4. 阅读页可按句播放、缓存音频、预生成章节音频。
 5. 阅读句子和音频位置可恢复。
 6. 自动化测试覆盖后端 API、TTS 规则和浏览器主流程。
+
+前端已按职责拆分为 `pages/`、`components/` 和 `hooks/`；`App.tsx` 只负责路由和跨模块编排，后续功能不再继续集中堆叠到单文件。
 
 ## 技术栈
 
@@ -163,6 +165,13 @@ npm run test:e2e
 
 ```sql
 CREATE DATABASE listen_book_e2e OWNER listen_book_app;
+```
+
+没有 PostgreSQL 建库权限时，可使用完全位于 `storage/e2e` 下的 SQLite 隔离测试库完成浏览器主流程验收：
+
+```powershell
+cd D:\Projects\listen_book\frontend
+npm run test:e2e:sqlite
 ```
 
 更多运行和排错步骤见 [docs/runbook.md](docs/runbook.md)。

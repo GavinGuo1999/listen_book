@@ -79,7 +79,6 @@ async function useAuthCookie(page: Page, token: string | null) {
         name: SESSION_COOKIE_NAME,
         value: token,
         url: APP_URL,
-        path: "/",
         httpOnly: true,
         sameSite: "Lax",
       },

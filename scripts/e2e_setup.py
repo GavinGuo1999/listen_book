@@ -6,6 +6,7 @@ from pathlib import Path
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import create_engine, delete, text
+from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ProgrammingError
 
 from e2e_env import BACKEND_DIR, REPO_ROOT, configure_e2e_environment, maintenance_database_url
@@ -13,8 +14,9 @@ from e2e_env import BACKEND_DIR, REPO_ROOT, configure_e2e_environment, maintenan
 
 def main() -> None:
     config = configure_e2e_environment()
-    _create_database_if_missing(config.source_database_url, config.database_name)
-    _run_migrations()
+    if make_url(config.database_url).get_backend_name() != "sqlite":
+        _create_database_if_missing(config.source_database_url, config.database_name)
+    _initialize_schema(config.database_url)
     _reset_e2e_data()
     print(f"e2e_database={config.database_name}")
     print(f"e2e_storage_root={config.storage_root}")
@@ -43,7 +45,17 @@ def _create_database_if_missing(database_url: str, database_name: str) -> None:
         engine.dispose()
 
 
-def _run_migrations() -> None:
+def _initialize_schema(database_url: str) -> None:
+    if make_url(database_url).get_backend_name() == "sqlite":
+        from app.db.base import Base
+
+        engine = create_engine(database_url)
+        try:
+            Base.metadata.create_all(engine)
+        finally:
+            engine.dispose()
+        return
+
     alembic_config = Config(str(BACKEND_DIR / "alembic.ini"))
     alembic_config.set_main_option("script_location", str(BACKEND_DIR / "alembic"))
     command.upgrade(alembic_config, "head")
@@ -78,7 +90,15 @@ def _reset_e2e_data() -> None:
         db.close()
 
     storage_root.mkdir(parents=True, exist_ok=True)
+    database_url = make_url(settings.database_url)
+    sqlite_database_path = (
+        Path(database_url.database).resolve()
+        if database_url.get_backend_name() == "sqlite" and database_url.database
+        else None
+    )
     for item in storage_root.rglob("*"):
+        if sqlite_database_path is not None and item.resolve() == sqlite_database_path:
+            continue
         if item.is_file() and item.name != ".gitkeep":
             item.unlink()
         elif item.is_dir() and not _contains_gitkeep(item):

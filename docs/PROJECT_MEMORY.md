@@ -647,3 +647,31 @@ npm run build
 cd D:\listen_book
 .venv\Scripts\ruff.exe check --no-cache backend\app
 ```
+
+## 最近交接记录：2026-07-15（v0.3.1）
+
+本轮完成：
+
+- 前端 `App.tsx` 从约 1400 行缩减到约 200 行，仅保留路由和跨模块编排。
+- 新增 `frontend/src/pages/`：登录页、阅读页、管理员审核页。
+- 新增 `frontend/src/components/`：应用侧栏、播放器、删除确认弹窗。
+- 新增 `frontend/src/hooks/`：认证、书库、音频播放、阅读进度、管理员审核。
+- 保留原有 API、页面路径、CSS 类名和 `data-testid`，拆分不改变用户流程。
+- 旧管理员接口在 OpenAPI 中标记为 deprecated；前端继续使用 `/api/admin/...`。
+- E2E 增加显式 SQLite 隔离模式，数据库文件限制在 `storage/e2e`，默认 PostgreSQL 模式保持不变。
+- 修复 Playwright 1.61 Cookie 参数兼容问题。
+- 前端、后端包和 FastAPI 元数据版本统一为 `0.3.1`。
+
+本轮验证：
+
+- `.venv\Scripts\python.exe -m pytest backend\tests -q`：`29 passed`。
+- `.venv\Scripts\ruff.exe check --no-cache backend\app backend\tests scripts\smoke_api.py`：通过。
+- `cd frontend && npm run build`：通过。
+- `cd frontend && npm run test:e2e:sqlite`：`5 passed`，覆盖登录、上传解析、进度恢复、删除和审批闭环。
+- 默认 PostgreSQL E2E 仍需要一次性创建 `listen_book_e2e`；当前本机应用账号没有建库权限。
+
+下一阶段优先任务：
+
+1. 设计常驻轻量 worker，统一领取解析、音频生成和章节预生成任务。
+2. 为任务补充开始/完成时间、重试策略、并发领取保护和后台失败重试入口。
+3. 建立真实 EPUB 黄金样本库，覆盖标题、目录、脚注和版权页过滤。

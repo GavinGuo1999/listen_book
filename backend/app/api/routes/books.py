@@ -62,13 +62,13 @@ def upload_book(
     return book
 
 
-@router.get("/admin/reviews", response_model=list[AdminBookReviewSummary])
+@router.get("/admin/reviews", response_model=list[AdminBookReviewSummary], deprecated=True)
 def list_admin_reviews(db: DbSession, admin_user: AdminUser) -> list[Book]:
     del admin_user
     return list_admin_review_books(db)
 
 
-@router.patch("/{book_id}/review", response_model=BookSummary)
+@router.patch("/{book_id}/review", response_model=BookSummary, deprecated=True)
 def update_book_review(
     book_id: UUID,
     payload: BookReviewUpdate,

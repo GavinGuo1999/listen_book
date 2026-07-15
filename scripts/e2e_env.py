@@ -17,6 +17,7 @@ DEFAULT_E2E_DATABASE_NAME = "listen_book_e2e"
 DEFAULT_E2E_ADMIN_USERNAME = "admin"
 DEFAULT_E2E_ADMIN_PASSWORD = "e2e-admin-password"
 DATABASE_NAME_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+E2E_DATABASE_URL_KEY = "LISTEN_BOOK_E2E_DATABASE_URL"
 
 
 @dataclass(frozen=True)
@@ -36,10 +37,16 @@ def configure_e2e_environment() -> E2EConfig:
     database_name = os.environ.get("LISTEN_BOOK_E2E_DATABASE_NAME", DEFAULT_E2E_DATABASE_NAME)
     if not DATABASE_NAME_PATTERN.fullmatch(database_name):
         raise RuntimeError(f"Unsafe E2E database name: {database_name}")
-    database_url = str(make_url(base_database_url).set(database=database_name))
     storage_root = Path(
         os.environ.get("LISTEN_BOOK_E2E_STORAGE_ROOT", REPO_ROOT / "storage" / "e2e")
     ).resolve()
+    database_url_override = os.environ.get(E2E_DATABASE_URL_KEY)
+    if database_url_override:
+        database_url = _validate_database_url_override(database_url_override, storage_root)
+    else:
+        database_url = make_url(base_database_url).set(database=database_name).render_as_string(
+            hide_password=False
+        )
     admin_username = os.environ.get(
         "LISTEN_BOOK_E2E_ADMIN_USERNAME",
         DEFAULT_E2E_ADMIN_USERNAME,
@@ -78,6 +85,27 @@ def configure_e2e_environment() -> E2EConfig:
 
 def maintenance_database_url(source_database_url: str) -> URL:
     return make_url(source_database_url)
+
+
+def _validate_database_url_override(database_url: str, storage_root: Path) -> str:
+    url = make_url(database_url)
+    if url.get_backend_name() != "sqlite":
+        if url.database != DEFAULT_E2E_DATABASE_NAME:
+            raise RuntimeError(
+                f"{E2E_DATABASE_URL_KEY} must target {DEFAULT_E2E_DATABASE_NAME!r}"
+            )
+        return url.render_as_string(hide_password=False)
+
+    if not url.database or url.database == ":memory:":
+        raise RuntimeError(f"{E2E_DATABASE_URL_KEY} must use a file under storage/e2e")
+    database_path = Path(url.database)
+    if not database_path.is_absolute():
+        database_path = (REPO_ROOT / database_path).resolve()
+    else:
+        database_path = database_path.resolve()
+    if not database_path.is_relative_to(storage_root):
+        raise RuntimeError(f"Refusing E2E SQLite database outside {storage_root}")
+    return f"sqlite+pysqlite:///{database_path.as_posix()}"
 
 
 def _read_config_value(key: str, default: str) -> str:

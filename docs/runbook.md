@@ -156,6 +156,9 @@ cd D:\Projects\listen_book\frontend
 # headless 运行（CI / 快速验证）
 npm run test:e2e
 
+# 没有 PostgreSQL 建库权限时，使用 storage/e2e 下的隔离 SQLite 数据库
+npm run test:e2e:sqlite
+
 # 可见浏览器（调试用）
 npx playwright test --headed
 
@@ -165,6 +168,8 @@ npx playwright test e2e/books.spec.ts
 
 测试文件：`frontend/e2e/books.spec.ts`
 Playwright 配置：`frontend/playwright.config.ts`
+
+SQLite 模式用于本地浏览器主流程验收，通过 SQLAlchemy 当前模型初始化测试库；PostgreSQL 模式额外验证 Alembic 迁移和生产数据库方言。发布前至少跑通一种模式，有 PostgreSQL 测试库时优先跑默认模式。
 
 注意：Playwright 会使用 8001/5174 端口启动测试服务。如果端口被占用，先停止占用进程再运行 E2E。
 
@@ -208,7 +213,7 @@ PATCH /api/admin/books/{book_id}/review
 
 当前支持上传格式为 TXT/EPUB；PDF 暂不接入。
 
-旧接口暂保留兼容，但新代码优先使用 `/api/admin/...`：
+旧接口暂保留兼容并已在 OpenAPI 中标记为 deprecated，新代码优先使用 `/api/admin/...`：
 
 ```http
 GET /api/books/admin/reviews
