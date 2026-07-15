@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AppSidebar } from "./components/AppSidebar";
 import { DeleteBookDialog } from "./components/DeleteBookDialog";
 import { useAdminReview } from "./hooks/useAdminReview";
+import { useAdminJobs } from "./hooks/useAdminJobs";
 import { useAudioPlayer } from "./hooks/useAudioPlayer";
 import { useAuth } from "./hooks/useAuth";
 import { useBooks } from "./hooks/useBooks";
@@ -21,6 +22,7 @@ export function App() {
   const books = useBooks(setError);
   const player = useAudioPlayer(setError);
   const admin = useAdminReview(auth.currentUser?.is_admin ?? false, setError);
+  const adminJobs = useAdminJobs(auth.currentUser?.is_admin ?? false, setError);
 
   const selectedBook = useMemo(
     () => books.books.find((book) => book.id === player.selectedBookId) ?? null,
@@ -161,17 +163,24 @@ export function App() {
           filter={admin.filter}
           filteredCount={admin.filteredBooks.length}
           isLoading={admin.isLoading}
+          jobFilter={adminJobs.filter}
+          jobs={adminJobs.jobs}
+          jobsLoading={adminJobs.isLoading}
           notesByBookId={admin.notesByBookId}
           onFilterChange={admin.setFilter}
+          onJobFilterChange={adminJobs.changeFilter}
+          onJobsRefresh={adminJobs.refresh}
           onNoteChange={admin.updateNote}
           onPageChange={admin.setPage}
           onRefresh={admin.refresh}
           onReview={handleReview}
+          onRetryJob={adminJobs.retry}
           onSelectBook={player.selectBook}
           page={admin.page}
           pageCount={admin.pageCount}
           pagedBooks={admin.pagedBooks}
           reviewingBookId={admin.reviewingBookId}
+          retryingJobId={adminJobs.retryingJobId}
         />
       ) : (
         <ReaderPage

@@ -5,6 +5,7 @@ import {
   fetchChapters,
   fetchSentenceAudioStatuses,
   generateSentenceAudio,
+  prefetchChapterAudio,
   prefetchSentenceAudio
 } from "../api";
 import type { AudioAsset, BookSummary, Chapter, Sentence } from "../types";
@@ -12,8 +13,9 @@ import { useReaderProgress } from "./useReaderProgress";
 
 const INITIAL_PREFETCH_SENTENCE_COUNT = 5;
 const PLAYBACK_PREFETCH_SENTENCE_COUNT = 8;
-const PREFETCH_BATCH_SIZE = 20;
 const AUDIO_STATUS_POLL_INTERVAL_MS = 2500;
+const AUDIO_READY_POLL_INTERVAL_MS = 750;
+const AUDIO_READY_MAX_POLLS = 80;
 type SetError = Dispatch<SetStateAction<string | null>>;
 
 export function useAudioPlayer(setError: SetError) {
@@ -187,16 +189,26 @@ export function useAudioPlayer(setError: SetError) {
       return cached;
     }
     const request = generateSentenceAudio(sentence.id)
-      .then((audio) => {
-        rememberAudioAssets([audio]);
-        return audio;
-      })
+      .then(waitForSentenceAudio)
       .catch((error) => {
         audioCacheRef.current.delete(sentence.id);
         throw error;
       });
     audioCacheRef.current.set(sentence.id, request);
     return request;
+  }
+
+  async function waitForSentenceAudio(initial: AudioAsset) {
+    let audio = initial;
+    for (let attempt = 0; attempt < AUDIO_READY_MAX_POLLS; attempt += 1) {
+      rememberAudioAssets([audio]);
+      if (audio.status === "ready" && audio.audio_url) return audio;
+      if (audio.status === "failed") throw new Error("音频生成失败，请稍后重试");
+      await new Promise((resolve) => window.setTimeout(resolve, AUDIO_READY_POLL_INTERVAL_MS));
+      const [nextAudio] = await fetchSentenceAudioStatuses([audio.sentence_id]);
+      if (nextAudio) audio = nextAudio;
+    }
+    throw new Error("音频生成超时，请确认后台 worker 正在运行");
   }
 
   function prefetchSentencesAfter(sentence: Sentence) {
@@ -209,15 +221,15 @@ export function useAudioPlayer(setError: SetError) {
   }
 
   async function prefetchChapter(chapter: Chapter) {
-    const sentences = chapter.paragraphs.flatMap((paragraph) => paragraph.sentences);
-    if (sentences.length === 0) {
-      return;
-    }
     setActivePrefetchChapterId(chapter.id);
     try {
-      for (let index = 0; index < sentences.length; index += PREFETCH_BATCH_SIZE) {
-        await prefetchSentences(sentences.slice(index, index + PREFETCH_BATCH_SIZE));
-      }
+      const response = await prefetchChapterAudio(chapter.id);
+      rememberAudioAssets(response.assets);
+      response.assets.forEach((audio) => {
+        if (audio.audio_url) audioCacheRef.current.set(audio.sentence_id, Promise.resolve(audio));
+      });
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "章节音频预生成失败");
     } finally {
       setActivePrefetchChapterId(null);
     }

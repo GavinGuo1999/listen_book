@@ -1,5 +1,6 @@
 import type {
   AdminBookReviewSummary,
+  AdminJob,
   AudioAsset,
   AudioPrefetchResponse,
   AuthResponse,
@@ -109,6 +110,23 @@ export async function fetchAdminBookReviews(): Promise<AdminBookReviewSummary[]>
   return response.json();
 }
 
+export async function fetchAdminJobs(status?: string): Promise<AdminJob[]> {
+  const query = status && status !== "all" ? `?status=${encodeURIComponent(status)}` : "";
+  const response = await apiFetch(`/api/admin/jobs${query}`);
+  if (!response.ok) {
+    throw new Error(await readError(response, "Failed to load jobs"));
+  }
+  return response.json();
+}
+
+export async function retryAdminJob(jobId: string): Promise<AdminJob> {
+  const response = await apiFetch(`/api/admin/jobs/${jobId}/retry`, { method: "POST" });
+  if (!response.ok) {
+    throw new Error(await readError(response, "Failed to retry job"));
+  }
+  return response.json();
+}
+
 export async function uploadBook(file: File): Promise<BookSummary> {
   const body = new FormData();
   body.append("file", file);
@@ -212,6 +230,16 @@ export async function prefetchSentenceAudio(
   });
   if (!response.ok) {
     throw new Error(await readError(response, "Failed to prefetch audio"));
+  }
+  return response.json();
+}
+
+export async function prefetchChapterAudio(chapterId: string): Promise<AudioPrefetchResponse> {
+  const response = await apiFetch(`/api/audio/chapters/${chapterId}/prefetch`, {
+    method: "POST"
+  });
+  if (!response.ok) {
+    throw new Error(await readError(response, "Failed to prefetch chapter audio"));
   }
   return response.json();
 }

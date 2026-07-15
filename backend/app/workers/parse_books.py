@@ -1,11 +1,9 @@
 from pathlib import Path
 from uuid import UUID
 
-from sqlalchemy import select
-
 from app.db.session import SessionLocal
 from app.models.book import Book, BookStatus, Chapter, Paragraph, Sentence
-from app.models.job import Job, JobStatus, JobType
+from app.models.job import Job
 from app.services.epub import read_epub_chapters
 from app.services.text_splitter import split_paragraphs, split_sentences, text_hash
 
@@ -97,52 +95,9 @@ def insert_chapters(db, book: Book, chapters: list[tuple[str, str]]) -> None:
 
 
 def run_once() -> int:
-    with SessionLocal() as db:
-        job = db.scalars(
-            select(Job)
-            .where(Job.job_type == JobType.PARSE_BOOK.value, Job.status == JobStatus.PENDING.value)
-            .order_by(Job.created_at)
-            .limit(1)
-        ).first()
+    from app.workers.jobs import run_once as run_next_job
 
-        if job is None:
-            return 0
-
-        job.status = JobStatus.RUNNING.value
-        job.error_message = None
-        job.attempts += 1
-        db.commit()
-        db.refresh(job)
-
-    try:
-        match job.payload.get("format"):
-            case "txt":
-                parse_txt_book(job)
-            case "epub":
-                parse_epub_book(job)
-            case unsupported_format:
-                raise RuntimeError(f"Unsupported parse format: {unsupported_format}")
-    except Exception as exc:
-        with SessionLocal() as db:
-            failed_job = db.get(Job, job.id)
-            if failed_job is not None:
-                failed_job.status = JobStatus.FAILED.value
-                failed_job.error_message = str(exc)
-                book_id = failed_job.payload.get("book_id")
-                if book_id:
-                    book = db.get(Book, UUID(book_id))
-                    if book is not None:
-                        book.status = BookStatus.FAILED.value
-                        book.error_message = str(exc)
-                db.commit()
-        raise
-
-    with SessionLocal() as db:
-        done_job = db.get(Job, job.id)
-        if done_job is not None:
-            done_job.status = JobStatus.DONE.value
-            db.commit()
-    return 1
+    return run_next_job()
 
 
 if __name__ == "__main__":

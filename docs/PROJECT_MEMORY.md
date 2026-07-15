@@ -675,3 +675,32 @@ cd D:\listen_book
 1. 设计常驻轻量 worker，统一领取解析、音频生成和章节预生成任务。
 2. 为任务补充开始/完成时间、重试策略、并发领取保护和后台失败重试入口。
 3. 建立真实 EPUB 黄金样本库，覆盖标题、目录、脚注和版权页过滤。
+
+## 最近交接记录：2026-07-15（v0.4.0）
+
+本轮完成：
+
+- 新增 Alembic 迁移 `20260715_0004`，扩展 Job 的优先级、去重、最大尝试次数、下次重试、开始和完成时间。
+- 新增通用常驻 worker `app.workers.jobs`，统一处理书籍解析、句子音频和章节音频预生成。
+- PostgreSQL 领取任务使用 `FOR UPDATE SKIP LOCKED`；失败任务指数退避，运行超时任务自动回收。
+- 上传、音频生成和章节预生成改为持久化入队，不再依赖 FastAPI `BackgroundTasks`。
+- 前端播放器会等待异步音频任务完成；章节按钮使用 `PREFETCH_CHAPTER_AUDIO`。
+- 管理员后台新增任务列表、状态筛选、失败原因、尝试次数和手动重试。
+- 新增 `GET /api/admin/jobs` 和 `POST /api/admin/jobs/{job_id}/retry`。
+- `scripts/start-dev.bat` 会自动迁移并启动 worker、后端、前端；`stop-dev.ps1` 只停止属于当前项目的进程。
+- E2E 测试后端会启动隔离 worker；SQLite E2E 初始化会重建隔离测试表结构。
+- 本机开发 PostgreSQL 已迁移到 `20260715_0004 (head)`。
+
+本轮验证：
+
+- `.venv\Scripts\python.exe -m pytest backend\tests -q`：`35 passed`。
+- `.venv\Scripts\ruff.exe check --no-cache backend\app backend\tests scripts\smoke_api.py scripts\e2e_env.py scripts\e2e_setup.py scripts\run_e2e_backend.py scripts\run_e2e_sqlite.py`：通过。
+- `cd frontend && npm run build`：通过。
+- `cd frontend && npm run test:e2e:sqlite`：`5 passed`。
+- Alembic PostgreSQL `upgrade head` 与 `current`：`20260715_0004 (head)`。
+
+下一阶段优先任务：
+
+1. 建立真实 EPUB 黄金样本库，覆盖标题、目录、脚注和版权页过滤。
+2. 增加任务保留/清理策略，避免长期运行后 done job 无限增长。
+3. 再评估用户管理、批量审核和更细权限。

@@ -1,8 +1,7 @@
-import logging
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, UploadFile, status
+from fastapi import APIRouter, Depends, File, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
@@ -27,24 +26,12 @@ from app.services.books import (
     review_book,
 )
 from app.services.progress import get_book_progress, save_book_progress
-from app.workers.parse_books import run_once
 
 router = APIRouter()
 DbSession = Annotated[Session, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_user)]
 AdminUser = Annotated[User, Depends(get_current_admin_user)]
 BookUpload = Annotated[UploadFile, File(...)]
-logger = logging.getLogger(__name__)
-
-
-def run_pending_parse_job() -> None:
-    try:
-        run_once()
-    except Exception:
-        # The worker records job/book failure details before re-raising.
-        logger.exception("Background book parsing failed")
-
-
 @router.get("", response_model=list[BookSummary])
 def list_books(db: DbSession, current_user: CurrentUser) -> list[Book]:
     return list_visible_books(db, current_user)
@@ -55,11 +42,8 @@ def upload_book(
     file: BookUpload,
     db: DbSession,
     current_user: CurrentUser,
-    background_tasks: BackgroundTasks,
 ) -> Book:
-    book = create_uploaded_book(db, file, current_user)
-    background_tasks.add_task(run_pending_parse_job)
-    return book
+    return create_uploaded_book(db, file, current_user)
 
 
 @router.get("/admin/reviews", response_model=list[AdminBookReviewSummary], deprecated=True)

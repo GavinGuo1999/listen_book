@@ -138,6 +138,7 @@ E2E 运行时会：
 - 使用独立存储目录 `storage/e2e`
 - 测试前执行迁移并清空测试库
 - bootstrap 测试管理员 `admin`
+- 在测试后端进程中启动隔离 worker，消费真实持久化任务
 - 临时启动测试后端到 `http://127.0.0.1:8001`
 - 临时启动测试前端到 `http://127.0.0.1:5174`
 - 让测试前端 dev server 代理 `/api` 到测试后端
@@ -234,13 +235,30 @@ PATCH /api/books/{book_id}/review
 - 这仍是轻量规则；尚未实现按角色分配不同音色。
 - 固定评测样例位于 `samples/tts_golden/`，评分口径见 `docs/tts-evaluation.md`。调整 TTS 或切句规则后，优先用这组样例听测，避免凭感觉反复改规则。
 
-## 手动 worker 兜底
+## 后台 worker
 
-上传接口会通过 FastAPI `BackgroundTasks` 自动触发一次解析。如果存在 pending parse job 需要手动重试：
+`scripts\start-dev.bat` 会先执行数据库迁移，再分别启动 worker、FastAPI 和 Vite。worker 持续处理书籍解析、句子音频生成和章节音频预生成任务。
+
+需要单独启动 worker 时：
 
 ```powershell
-cd D:\Projects\listen_book
-.venv\Scripts\python.exe -m app.workers.parse_books
+cd D:\Projects\listen_book\backend
+..\.venv\Scripts\python.exe -m app.workers.jobs
+```
+
+任务领取规则：
+
+- 解析任务优先于章节预生成和单句音频任务。
+- PostgreSQL 使用 `FOR UPDATE SKIP LOCKED`，多个 worker 不会领取同一任务。
+- 失败任务最多自动尝试 3 次，按指数退避等待。
+- 运行超过 5 分钟仍未完成的任务会被视为 worker 中断并重新入队。
+- 最终失败任务可在 `/admin` 的任务中心查看并手动重试。
+
+管理员任务 API：
+
+```http
+GET /api/admin/jobs?status=failed
+POST /api/admin/jobs/{job_id}/retry
 ```
 
 ## 常见注意事项

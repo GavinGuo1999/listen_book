@@ -59,6 +59,20 @@ export type AudioPrefetchResponse = {
   queued_sentence_ids: string[];
 };
 
+export type AdminJob = {
+  id: string;
+  job_type: string;
+  status: string;
+  target_id: string | null;
+  attempts: number;
+  max_attempts: number;
+  error_message: string | null;
+  next_retry_at: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+  created_at: string;
+};
+
 export type ReadingProgress = {
   book_id: string;
   chapter_id: string | null;

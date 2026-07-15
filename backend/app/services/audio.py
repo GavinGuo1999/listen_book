@@ -1,19 +1,17 @@
-import logging
 from pathlib import Path
 from uuid import UUID
 
-from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db.session import SessionLocal
 from app.models.audio import AudioAsset, AudioStatus
 from app.models.book import Sentence
+from app.models.job import JobType
+from app.services.jobs import enqueue_job
 from app.services.tts import TTSRequest, default_tts_provider
 
 DEFAULT_VOICE = "zh-CN-XiaoxiaoNeural"
 DEFAULT_SPEED = 100
-logger = logging.getLogger(__name__)
 
 
 def sentence_audio_stmt(sentence: Sentence):
@@ -39,7 +37,12 @@ def get_existing_sentence_audio(db: Session, sentence: Sentence) -> AudioAsset |
     return db.scalar(sentence_audio_stmt(sentence))
 
 
-def ensure_pending_sentence_audio(db: Session, sentence: Sentence) -> AudioAsset:
+def ensure_pending_sentence_audio(
+    db: Session,
+    sentence: Sentence,
+    *,
+    commit: bool = True,
+) -> AudioAsset:
     existing = get_existing_sentence_audio(db, sentence)
     if existing is not None:
         return existing
@@ -55,21 +58,43 @@ def ensure_pending_sentence_audio(db: Session, sentence: Sentence) -> AudioAsset
         status=AudioStatus.PENDING.value,
     )
     db.add(asset)
-    db.commit()
-    db.refresh(asset)
+    if commit:
+        db.commit()
+        db.refresh(asset)
+    else:
+        db.flush()
     return asset
 
 
-def audio_asset_should_be_queued(asset: AudioAsset) -> bool:
-    if asset.status == AudioStatus.READY.value and audio_file_is_available(asset):
-        return False
-    return asset.status not in {AudioStatus.PENDING.value, AudioStatus.GENERATING.value}
+def queue_sentence_audio(db: Session, sentence: Sentence) -> tuple[AudioAsset, bool]:
+    asset = get_existing_sentence_audio(db, sentence)
+    if (
+        asset is not None
+        and asset.status == AudioStatus.READY.value
+        and audio_file_is_available(asset)
+    ):
+        return asset, False
+
+    asset = asset or ensure_pending_sentence_audio(db, sentence, commit=False)
+    job, created = enqueue_job(
+        db,
+        job_type=JobType.GENERATE_AUDIO.value,
+        payload={"sentence_id": str(sentence.id), "audio_asset_id": str(asset.id)},
+        dedupe_key=f"audio:{asset.id}",
+        priority=50,
+    )
+    if created or job.status == "pending":
+        asset.status = AudioStatus.PENDING.value
+        asset.error_message = None
+    db.commit()
+    db.refresh(asset)
+    return asset, created
 
 
-def get_or_create_sentence_audio(db: Session, sentence_id: UUID) -> AudioAsset:
+def generate_sentence_audio_asset(db: Session, sentence_id: UUID) -> AudioAsset:
     sentence = db.get(Sentence, sentence_id)
     if sentence is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sentence not found")
+        raise LookupError(f"Sentence not found: {sentence_id}")
 
     provider = default_tts_provider
     existing = get_existing_sentence_audio(db, sentence)
@@ -105,10 +130,7 @@ def get_or_create_sentence_audio(db: Session, sentence_id: UUID) -> AudioAsset:
         asset.status = AudioStatus.FAILED.value
         asset.error_message = str(exc)
         db.commit()
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"TTS generation failed: {exc}",
-        ) from exc
+        raise RuntimeError(f"TTS generation failed: {exc}") from exc
 
     asset.storage_path = result.audio_path
     asset.duration_ms = result.duration_ms
@@ -116,16 +138,3 @@ def get_or_create_sentence_audio(db: Session, sentence_id: UUID) -> AudioAsset:
     db.commit()
     db.refresh(asset)
     return asset
-
-
-def generate_sentence_audio_job(sentence_id: UUID) -> None:
-    db = SessionLocal()
-    try:
-        get_or_create_sentence_audio(db, sentence_id)
-    except Exception:
-        logger.exception(
-            "Background sentence audio generation failed",
-            extra={"sentence_id": sentence_id},
-        )
-    finally:
-        db.close()

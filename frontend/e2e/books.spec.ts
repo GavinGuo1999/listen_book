@@ -258,6 +258,7 @@ test.describe("Listen Book browser flow", () => {
       await page.goto("/admin");
       const reviewQueue = page.locator("[data-testid='admin-review-queue']");
       await expect(reviewQueue).toBeVisible();
+      await expect(page.locator("[data-testid='admin-job-queue']")).toBeVisible();
       const reviewItem = reviewQueue.locator("[data-testid='review-queue-item']").filter({
         hasText: title,
       });

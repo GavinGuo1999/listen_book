@@ -18,9 +18,10 @@ from app.models.book import (
     Paragraph,
     Sentence,
 )
-from app.models.job import Job, JobStatus, JobType
+from app.models.job import Job, JobType
 from app.models.progress import ReadingProgress
 from app.models.user import User
+from app.services.jobs import enqueue_job
 
 SUPPORTED_FORMATS = {"txt", "epub"}
 logger = logging.getLogger(__name__)
@@ -90,16 +91,16 @@ def create_uploaded_book(db: Session, file: UploadFile, uploader: User) -> Book:
             size_bytes=size_bytes,
         )
     )
-    db.add(
-        Job(
-            job_type=JobType.PARSE_BOOK.value,
-            status=JobStatus.PENDING.value,
-            payload={
-                "book_id": str(book.id),
-                "storage_path": str(storage_path),
-                "format": extension,
-            },
-        )
+    enqueue_job(
+        db,
+        job_type=JobType.PARSE_BOOK.value,
+        payload={
+            "book_id": str(book.id),
+            "storage_path": str(storage_path),
+            "format": extension,
+        },
+        dedupe_key=f"parse:{book.id}",
+        priority=10,
     )
     db.commit()
     db.refresh(book)
@@ -172,6 +173,20 @@ def ensure_sentence_accessible(db: Session, sentence_id: UUID, user: User) -> Se
             detail=f"Sentence not found: {sentence_id}",
         )
     return sentence
+
+
+def ensure_chapter_accessible(db: Session, chapter_id: UUID, user: User) -> Chapter:
+    row = db.execute(
+        select(Chapter, Book)
+        .join(Book, Chapter.book_id == Book.id)
+        .where(Chapter.id == chapter_id)
+    ).one_or_none()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chapter not found")
+    chapter, book = row
+    if not can_access_book(book, user):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chapter not found")
+    return chapter
 
 
 def delete_book(db: Session, book_id: UUID, user: User) -> None:

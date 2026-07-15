@@ -51,6 +51,7 @@ def _initialize_schema(database_url: str) -> None:
 
         engine = create_engine(database_url)
         try:
+            Base.metadata.drop_all(engine)
             Base.metadata.create_all(engine)
         finally:
             engine.dispose()

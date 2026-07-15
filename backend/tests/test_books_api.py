@@ -21,6 +21,7 @@ from app.models.progress import ReadingProgress
 from app.models.user import User
 from app.services.auth import bootstrap_admin_user
 from app.services.text_splitter import text_hash
+from app.workers import jobs
 
 
 def test_books_require_authentication(client: TestClient) -> None:
@@ -41,6 +42,7 @@ def test_upload_txt_parses_book_to_ready(client: TestClient, db_session: Session
 
     assert response.status_code == 201
     book_id = response.json()["id"]
+    drain_jobs(db_session)
 
     books_response = client.get("/api/books", headers=headers)
     assert books_response.status_code == 200
@@ -70,6 +72,7 @@ def test_upload_gb18030_txt_parses_book_to_ready(
 
     assert response.status_code == 201
     book_id = response.json()["id"]
+    drain_jobs(db_session)
 
     chapters_response = client.get(f"/api/books/{book_id}/chapters", headers=headers)
     assert chapters_response.status_code == 200
@@ -94,6 +97,7 @@ def test_upload_epub_parses_spine_chapters_to_ready(
 
     assert response.status_code == 201
     book_id = response.json()["id"]
+    drain_jobs(db_session)
 
     books_response = client.get("/api/books", headers=headers)
     assert books_response.status_code == 200
@@ -128,6 +132,7 @@ def test_upload_invalid_epub_marks_book_failed(client: TestClient, db_session: S
 
     assert response.status_code == 201
     book_id = response.json()["id"]
+    drain_jobs(db_session)
 
     books_response = client.get("/api/books", headers=headers)
     assert books_response.status_code == 200
@@ -155,6 +160,7 @@ def test_user_upload_waits_for_admin_approval_before_public_visibility(
     book_id = uploaded_book["id"]
     assert uploaded_book["status"] == BookStatus.UPLOADED.value
     assert uploaded_book["review_status"] == BookReviewStatus.PENDING.value
+    drain_jobs(db_session)
 
     uploader_books_response = client.get(
         "/api/books",
@@ -412,6 +418,15 @@ def register_admin_user(client: TestClient, db_session: Session, username: str =
 
 def auth_headers(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
+
+
+def drain_jobs(db_session: Session, max_jobs: int = 20) -> None:
+    for _ in range(max_jobs):
+        if jobs.run_once(retry_base_seconds=0) == 0:
+            break
+    else:
+        raise AssertionError("Job queue did not become idle")
+    db_session.expire_all()
 
 
 def create_minimal_epub(path) -> None:

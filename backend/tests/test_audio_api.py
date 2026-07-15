@@ -8,8 +8,10 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.models.audio import AudioAsset, AudioStatus
 from app.models.book import Book, BookStatus, Chapter, Paragraph, Sentence
+from app.models.job import Job, JobStatus, JobType
 from app.services.text_splitter import text_hash
 from app.services.tts import TTSRequest, TTSResult
+from app.workers import jobs
 
 
 class FakeTTSProvider:
@@ -51,6 +53,17 @@ def test_generate_sentence_audio_creates_ready_asset_and_serves_file(
     assert response.status_code == 200
     payload = response.json()
     assert payload["sentence_id"] == str(sentence.id)
+    assert payload["status"] == AudioStatus.PENDING.value
+    assert payload["audio_url"] is None
+    assert fake_tts.calls == 0
+
+    drain_jobs(db_session)
+    status_response = client.post(
+        "/api/audio/sentences/status",
+        headers=headers,
+        json={"sentence_ids": [str(sentence.id)]},
+    )
+    payload = status_response.json()[0]
     assert payload["status"] == AudioStatus.READY.value
     assert payload["audio_url"].startswith("/api/audio/assets/")
     assert payload["duration_ms"] == 1234
@@ -92,21 +105,35 @@ def test_generate_sentence_audio_marks_asset_failed_when_provider_fails(
 
     response = client.post(f"/api/audio/sentences/{sentence.id}", headers=headers)
 
-    assert response.status_code == 502
-    assert response.json()["detail"] == "TTS generation failed: fake provider failure"
+    assert response.status_code == 200
+    assert response.json()["status"] == AudioStatus.PENDING.value
+    [job] = db_session.query(Job).all()
+    job.max_attempts = 1
+    db_session.commit()
+    drain_jobs(db_session)
     assert failing_provider.calls == 1
 
     [asset] = db_session.query(AudioAsset).all()
     assert asset.status == AudioStatus.FAILED.value
     assert asset.error_message == "fake provider failure"
+    failed_job = db_session.get(Job, job.id)
+    assert failed_job is not None
+    assert failed_job.status == JobStatus.FAILED.value
 
     working_provider = FakeTTSProvider()
     monkeypatch.setattr("app.services.audio.default_tts_provider", working_provider)
     retry_response = client.post(f"/api/audio/sentences/{sentence.id}", headers=headers)
 
     assert retry_response.status_code == 200
-    assert retry_response.json()["status"] == AudioStatus.READY.value
+    assert retry_response.json()["status"] == AudioStatus.PENDING.value
     assert retry_response.json()["id"] == str(asset.id)
+    drain_jobs(db_session)
+    ready_response = client.post(
+        "/api/audio/sentences/status",
+        headers=headers,
+        json={"sentence_ids": [str(sentence.id)]},
+    )
+    assert ready_response.json()[0]["status"] == AudioStatus.READY.value
     assert working_provider.calls == 1
 
 
@@ -114,17 +141,9 @@ def test_prefetch_queues_pending_audio_and_status_reports_it(
     client: TestClient,
     db_session: Session,
     fake_tts: FakeTTSProvider,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _book, sentence = create_ready_book(db_session)
     headers = auth_headers(register_user(client))
-    queued_sentence_ids: list[str] = []
-
-    def fake_background_job(sentence_id):
-        queued_sentence_ids.append(str(sentence_id))
-
-    monkeypatch.setattr("app.api.routes.audio.generate_sentence_audio_job", fake_background_job)
-
     response = client.post(
         "/api/audio/sentences/prefetch",
         headers=headers,
@@ -137,8 +156,10 @@ def test_prefetch_queues_pending_audio_and_status_reports_it(
     assert payload["assets"][0]["sentence_id"] == str(sentence.id)
     assert payload["assets"][0]["status"] == AudioStatus.PENDING.value
     assert payload["assets"][0]["audio_url"] is None
-    assert queued_sentence_ids == [str(sentence.id)]
     assert fake_tts.calls == 0
+    [job] = db_session.query(Job).all()
+    assert job.job_type == JobType.GENERATE_AUDIO.value
+    assert job.status == JobStatus.PENDING.value
 
     status_response = client.post(
         "/api/audio/sentences/status",
@@ -173,6 +194,35 @@ def test_prefetch_and_status_validate_missing_sentence(
     assert status_response.status_code == 404
     assert status_response.json()["detail"] == f"Sentence not found: {missing_sentence_id}"
     assert fake_tts.calls == 0
+
+
+def test_chapter_prefetch_queues_chapter_and_sentence_audio_jobs(
+    client: TestClient,
+    db_session: Session,
+    fake_tts: FakeTTSProvider,
+) -> None:
+    _book, sentence = create_ready_book(db_session, title="Chapter Prefetch")
+    chapter_id = db_session.get(Paragraph, sentence.paragraph_id).chapter_id
+    headers = auth_headers(register_user(client, username="chapter-prefetch-reader"))
+
+    response = client.post(f"/api/audio/chapters/{chapter_id}/prefetch", headers=headers)
+
+    assert response.status_code == 200
+    assert response.json()["queued_sentence_ids"] == [str(sentence.id)]
+    [chapter_job] = db_session.query(Job).all()
+    assert chapter_job.job_type == JobType.PREFETCH_CHAPTER_AUDIO.value
+    assert chapter_job.status == JobStatus.PENDING.value
+
+    assert jobs.run_once(retry_base_seconds=0) == 1
+    db_session.expire_all()
+    audio_job = db_session.query(Job).filter(Job.job_type == JobType.GENERATE_AUDIO.value).one()
+    assert audio_job.status == JobStatus.PENDING.value
+
+    assert jobs.run_once(retry_base_seconds=0) == 1
+    db_session.expire_all()
+    asset = db_session.query(AudioAsset).one()
+    assert asset.status == AudioStatus.READY.value
+    assert fake_tts.calls == 1
 
 
 def test_audio_file_endpoint_rejects_unready_missing_and_outside_storage_assets(
@@ -287,3 +337,12 @@ def register_user(client: TestClient, username: str = "audio-reader") -> str:
 
 def auth_headers(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
+
+
+def drain_jobs(db_session: Session, max_jobs: int = 20) -> None:
+    for _ in range(max_jobs):
+        if jobs.run_once(retry_base_seconds=0) == 0:
+            break
+    else:
+        raise AssertionError("Job queue did not become idle")
+    db_session.expire_all()

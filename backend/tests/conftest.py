@@ -9,7 +9,7 @@ from app.core.config import settings
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import create_app
-from app.workers import parse_books
+from app.workers import jobs, parse_books
 
 
 @pytest.fixture
@@ -34,6 +34,7 @@ def db_session(tmp_path, monkeypatch) -> Generator[Session, None, None]:
     )
     Base.metadata.create_all(engine)
     monkeypatch.setattr(parse_books, "SessionLocal", TestingSessionLocal)
+    monkeypatch.setattr(jobs, "SessionLocal", TestingSessionLocal)
 
     db = TestingSessionLocal()
     try:
@@ -55,4 +56,3 @@ def client(db_session: Session) -> Generator[TestClient, None, None]:
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
-
