@@ -256,15 +256,19 @@ test.describe("Listen Book browser flow", () => {
 
       await useAuthCookie(page, adminAuth.access_token);
       await page.goto("/admin");
+      await expect(page.locator("[data-testid='admin-system-status']")).toBeVisible();
+      await page.locator("[data-testid='admin-tab-jobs']").click();
+      await expect(page.locator("[data-testid='admin-job-queue']")).toBeVisible();
+      await page.locator("[data-testid='admin-tab-books']").click();
       const reviewQueue = page.locator("[data-testid='admin-review-queue']");
       await expect(reviewQueue).toBeVisible();
-      await expect(page.locator("[data-testid='admin-job-queue']")).toBeVisible();
       const reviewItem = reviewQueue.locator("[data-testid='review-queue-item']").filter({
         hasText: title,
       });
       await expect(reviewItem).toBeVisible();
       await expect(reviewItem).toContainText(`@${uploader.username}`);
-      await reviewItem.locator("[data-testid='review-approve']").click();
+      await reviewItem.locator("input[type='checkbox']").check();
+      await page.locator("[data-testid='bulk-approve']").click();
       await expect(reviewItem).toHaveCount(0, { timeout: 10_000 });
       await reviewQueue.locator("[data-testid='review-filter-all']").click();
       const reviewedItem = reviewQueue.locator("[data-testid='review-queue-item']").filter({
@@ -281,6 +285,54 @@ test.describe("Listen Book browser flow", () => {
     } finally {
       await useAuthCookie(page, adminAuth.access_token);
       await deleteBookIfPresent(page, title);
+    }
+  });
+
+  test("diagnoses the system and manages a user with an audit trail", async ({ page, request }) => {
+    const adminAuth = await loginUserViaApi(request, E2E_ADMIN);
+    const managedUser = await registerRegularUserViaApi(request);
+
+    try {
+      await useAuthCookie(page, adminAuth.access_token);
+      await page.goto("/admin");
+      const systemStatus = page.locator("[data-testid='admin-system-status']");
+      await expect(systemStatus).toBeVisible();
+      await expect(systemStatus).toContainText("数据库连接");
+      await expect(systemStatus).toContainText("后台 Worker");
+
+      await page.locator("[data-testid='admin-tab-users']").click();
+      const userManagement = page.locator("[data-testid='admin-user-management']");
+      await expect(userManagement).toBeVisible();
+      await userManagement.locator("[data-testid='user-search']").fill(managedUser.username);
+      const userRow = userManagement.locator("[data-testid='admin-user-row']").filter({
+        hasText: managedUser.username,
+      });
+      await expect(userRow).toBeVisible();
+      await userRow.locator("button[aria-label='停用账号']").click();
+      await expect(userRow).toContainText("已停用");
+
+      const disabledLogin = await request.post("/api/auth/login", {
+        data: { username: managedUser.username, password: managedUser.password },
+      });
+      expect(disabledLogin.status()).toBe(403);
+
+      await page.locator("[data-testid='admin-tab-audit']").click();
+      const auditEvents = page.locator("[data-testid='admin-audit-events']");
+      await expect(auditEvents).toContainText("停用账号");
+      await expect(auditEvents).toContainText(managedUser.username);
+    } finally {
+      const usersResponse = await request.get(`/api/admin/users?q=${managedUser.username}`, {
+        headers: { Authorization: `Bearer ${adminAuth.access_token}` },
+      });
+      if (usersResponse.ok()) {
+        const users = await usersResponse.json() as { items: { id: string }[] };
+        if (users.items[0]) {
+          await request.patch(`/api/admin/users/${users.items[0].id}`, {
+            headers: { Authorization: `Bearer ${adminAuth.access_token}` },
+            data: { is_active: true },
+          });
+        }
+      }
     }
   });
 });

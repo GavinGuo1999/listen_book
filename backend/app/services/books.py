@@ -39,7 +39,7 @@ def list_visible_books(db: Session, user: User) -> list[Book]:
     return list(db.scalars(stmt).all())
 
 
-def list_admin_review_books(db: Session) -> list[Book]:
+def list_admin_review_books(db: Session, *, uploader_id: UUID | None = None) -> list[Book]:
     stmt = (
         select(Book)
         .options(
@@ -48,6 +48,8 @@ def list_admin_review_books(db: Session) -> list[Book]:
         )
         .order_by(Book.created_at.desc())
     )
+    if uploader_id is not None:
+        stmt = stmt.where(Book.uploader_id == uploader_id)
     return list(db.scalars(stmt).all())
 
 
@@ -119,6 +121,61 @@ def review_book(
     if book is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Book not found")
 
+    _apply_book_review(
+        db,
+        book,
+        reviewer=reviewer,
+        review_status=review_status,
+        review_note=review_note,
+    )
+    db.commit()
+    db.refresh(book)
+    return book
+
+
+def review_books(
+    db: Session,
+    book_ids: list[UUID],
+    *,
+    reviewer: User,
+    review_status: str,
+    review_note: str | None = None,
+) -> list[Book]:
+    unique_ids = list(dict.fromkeys(book_ids))
+    books_by_id = {
+        book.id: book
+        for book in db.scalars(select(Book).where(Book.id.in_(unique_ids))).all()
+    }
+    missing_ids = [book_id for book_id in unique_ids if book_id not in books_by_id]
+    if missing_ids:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Books not found: {', '.join(str(book_id) for book_id in missing_ids)}",
+        )
+
+    books = [books_by_id[book_id] for book_id in unique_ids]
+    for book in books:
+        _apply_book_review(
+            db,
+            book,
+            reviewer=reviewer,
+            review_status=review_status,
+            review_note=review_note,
+        )
+    db.commit()
+    for book in books:
+        db.refresh(book)
+    return books
+
+
+def _apply_book_review(
+    db: Session,
+    book: Book,
+    *,
+    reviewer: User,
+    review_status: str,
+    review_note: str | None,
+) -> None:
     previous_review_status = book.review_status
     cleaned_note = review_note.strip() if review_note and review_note.strip() else None
     book.review_status = review_status
@@ -132,9 +189,6 @@ def review_book(
             note=cleaned_note,
         )
     )
-    db.commit()
-    db.refresh(book)
-    return book
 
 
 def ensure_book_accessible(db: Session, book_id: UUID, user: User) -> Book:

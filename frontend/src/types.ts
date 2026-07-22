@@ -86,6 +86,55 @@ export type User = {
   username: string;
   display_name: string;
   is_admin: boolean;
+  is_active: boolean;
+};
+
+export type AdminUser = User & {
+  uploaded_book_count: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AdminUserList = {
+  items: AdminUser[];
+  total: number;
+  page: number;
+  page_size: number;
+};
+
+export type AdminAuditEvent = {
+  id: string;
+  actor_id: string;
+  actor_username: string | null;
+  target_user_id: string | null;
+  target_username: string | null;
+  action: string;
+  details: Record<string, unknown>;
+  created_at: string;
+};
+
+export type SystemCheck = {
+  key: string;
+  label: string;
+  status: "ok" | "warning" | "error";
+  message: string;
+};
+
+export type WorkerStatus = {
+  worker_id: string;
+  hostname: string;
+  process_id: number;
+  started_at: string;
+  last_seen_at: string;
+  is_online: boolean;
+};
+
+export type AdminSystemStatus = {
+  status: "ok" | "warning" | "error";
+  version: string;
+  checked_at: string;
+  checks: SystemCheck[];
+  workers: WorkerStatus[];
 };
 
 export type AuthResponse = {

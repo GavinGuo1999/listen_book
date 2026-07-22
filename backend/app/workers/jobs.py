@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import logging
+import os
 import signal
+import socket
 import threading
 from datetime import UTC, datetime, timedelta
 from time import monotonic
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
@@ -16,6 +18,7 @@ from app.models.book import Book, BookStatus, Chapter, Paragraph, Sentence
 from app.models.job import Job, JobStatus, JobType
 from app.services.audio import generate_sentence_audio_asset, queue_sentence_audio
 from app.services.jobs import cleanup_completed_jobs
+from app.services.operations import record_worker_heartbeat
 from app.workers.parse_books import parse_epub_book, parse_txt_book
 
 logger = logging.getLogger(__name__)
@@ -202,13 +205,34 @@ def run_forever(
     *,
     poll_interval_seconds: float = DEFAULT_POLL_INTERVAL_SECONDS,
     cleanup_interval_seconds: int | None = None,
+    heartbeat_interval_seconds: int | None = None,
+    worker_id: str | None = None,
 ) -> None:
     stop_event = stop_event or threading.Event()
     cleanup_interval_seconds = cleanup_interval_seconds or settings.job_cleanup_interval_seconds
+    heartbeat_interval_seconds = (
+        heartbeat_interval_seconds or settings.worker_heartbeat_interval_seconds
+    )
+    hostname = socket.gethostname()
+    process_id = os.getpid()
+    worker_id = worker_id or f"{hostname}:{process_id}:{uuid4().hex[:8]}"
+    worker_started_at = datetime.now(UTC)
     next_cleanup_at = 0.0
+    next_heartbeat_at = 0.0
     logger.info("Listen Book worker started")
     while not stop_event.is_set():
         started = monotonic()
+        if started >= next_heartbeat_at:
+            try:
+                publish_worker_heartbeat(
+                    worker_id=worker_id,
+                    hostname=hostname,
+                    process_id=process_id,
+                    started_at=worker_started_at,
+                )
+            except Exception:
+                logger.exception("Worker heartbeat update failed")
+            next_heartbeat_at = started + heartbeat_interval_seconds
         if started >= next_cleanup_at:
             try:
                 deleted_count = cleanup_expired_completed_jobs()
@@ -233,6 +257,23 @@ def run_forever(
 def cleanup_expired_completed_jobs() -> int:
     with SessionLocal() as db:
         return cleanup_completed_jobs(db, retention_days=settings.job_retention_days)
+
+
+def publish_worker_heartbeat(
+    *,
+    worker_id: str,
+    hostname: str,
+    process_id: int,
+    started_at: datetime,
+) -> None:
+    with SessionLocal() as db:
+        record_worker_heartbeat(
+            db,
+            worker_id=worker_id,
+            hostname=hostname,
+            process_id=process_id,
+            started_at=started_at,
+        )
 
 
 def main() -> None:

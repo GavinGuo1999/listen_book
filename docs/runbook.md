@@ -79,6 +79,15 @@ scripts\stop-dev.bat
 curl.exe http://127.0.0.1:8000/api/health
 ```
 
+管理员登录后可在 `/admin` 的“系统状态”查看完整诊断，或在命令行运行：
+
+```powershell
+cd D:\Projects\listen_book
+.venv\Scripts\python.exe scripts\check_system.py
+```
+
+诊断检查数据库连接、Alembic 版本、存储写权限、会话密钥、bootstrap 管理员配置和 Worker 心跳。命令不会输出密钥、密码、数据库连接串或存储绝对路径；存在阻断项时退出码为 `1`。
+
 前端：
 
 ```text
@@ -276,6 +285,35 @@ LISTEN_BOOK_JOB_CLEANUP_INTERVAL_SECONDS=3600
 GET /api/admin/jobs?status=failed
 POST /api/admin/jobs/{job_id}/retry
 ```
+
+## 管理员后台
+
+后台入口为 `/admin`，包含五个视图：
+
+- 系统状态：启动诊断和 Worker 心跳。
+- 书籍审核：状态筛选、书名/上传者搜索、单本审批和批量审批。
+- 用户管理：搜索、状态/角色筛选、分页、上传记录、启停账号和管理员授权。
+- 任务队列：任务状态、失败原因和手动重试。
+- 操作审计：用户启停和管理员权限变更历史。
+
+主要 API：
+
+```http
+GET /api/admin/system/status
+GET /api/admin/users
+PATCH /api/admin/users/{user_id}
+GET /api/admin/users/{user_id}/books
+POST /api/admin/books/reviews/batch
+GET /api/admin/audit-events
+```
+
+安全规则：
+
+- 当前登录管理员不能修改自己的权限或启用状态。
+- `.env` 配置的 bootstrap 管理员不能被停用或撤销管理员。
+- 系统拒绝任何会导致启用中管理员数量变为零的操作。
+- 不提供用户硬删除，避免破坏上传、阅读进度和审计外键。
+- 批量审批最多一次处理 100 本书，并为每本书分别写入审批事件。
 
 ## 常见注意事项
 

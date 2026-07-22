@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     storage_root: Path = Field(default=PROJECT_ROOT / "storage")
     job_retention_days: int = Field(default=30, ge=1)
     job_cleanup_interval_seconds: int = Field(default=3600, ge=60)
+    worker_heartbeat_interval_seconds: int = Field(default=5, ge=1)
+    worker_offline_after_seconds: int = Field(default=30, ge=5)
     cors_origins_raw: str = Field(
         default="http://localhost:5173,http://127.0.0.1:5173",
         validation_alias="LISTEN_BOOK_CORS_ORIGINS",

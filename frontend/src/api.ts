@@ -1,6 +1,10 @@
 import type {
   AdminBookReviewSummary,
+  AdminAuditEvent,
   AdminJob,
+  AdminSystemStatus,
+  AdminUser,
+  AdminUserList,
   AudioAsset,
   AudioPrefetchResponse,
   AuthResponse,
@@ -127,6 +131,68 @@ export async function retryAdminJob(jobId: string): Promise<AdminJob> {
   return response.json();
 }
 
+export async function fetchAdminSystemStatus(): Promise<AdminSystemStatus> {
+  const response = await apiFetch("/api/admin/system/status");
+  if (!response.ok) {
+    throw new Error(await readError(response, "Failed to load system status"));
+  }
+  return response.json();
+}
+
+export type AdminUserQuery = {
+  query: string;
+  status: "all" | "active" | "disabled";
+  role: "all" | "admin" | "user";
+  page: number;
+  pageSize?: number;
+};
+
+export async function fetchAdminUsers(query: AdminUserQuery): Promise<AdminUserList> {
+  const params = new URLSearchParams({
+    q: query.query,
+    status: query.status,
+    role: query.role,
+    page: String(query.page),
+    page_size: String(query.pageSize ?? 10)
+  });
+  const response = await apiFetch(`/api/admin/users?${params}`);
+  if (!response.ok) {
+    throw new Error(await readError(response, "Failed to load users"));
+  }
+  return response.json();
+}
+
+export async function updateAdminUser(
+  userId: string,
+  changes: { is_admin?: boolean; is_active?: boolean }
+): Promise<AdminUser> {
+  const response = await apiFetch(`/api/admin/users/${userId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(changes)
+  });
+  if (!response.ok) {
+    throw new Error(await readError(response, "Failed to update user"));
+  }
+  return response.json();
+}
+
+export async function fetchAdminUserBooks(userId: string): Promise<AdminBookReviewSummary[]> {
+  const response = await apiFetch(`/api/admin/users/${userId}/books`);
+  if (!response.ok) {
+    throw new Error(await readError(response, "Failed to load user uploads"));
+  }
+  return response.json();
+}
+
+export async function fetchAdminAuditEvents(): Promise<AdminAuditEvent[]> {
+  const response = await apiFetch("/api/admin/audit-events");
+  if (!response.ok) {
+    throw new Error(await readError(response, "Failed to load audit events"));
+  }
+  return response.json();
+}
+
 export async function uploadBook(file: File): Promise<BookSummary> {
   const body = new FormData();
   body.append("file", file);
@@ -167,6 +233,26 @@ export async function reviewBook(
   });
   if (!response.ok) {
     throw new Error(await readError(response, "Failed to review book"));
+  }
+  return response.json();
+}
+
+export async function batchReviewBooks(
+  bookIds: string[],
+  reviewStatus: "approved" | "rejected",
+  reviewNote?: string
+): Promise<BookSummary[]> {
+  const response = await apiFetch("/api/admin/books/reviews/batch", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      book_ids: bookIds,
+      review_status: reviewStatus,
+      review_note: reviewNote || null
+    })
+  });
+  if (!response.ok) {
+    throw new Error(await readError(response, "Failed to batch review books"));
   }
   return response.json();
 }

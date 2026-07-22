@@ -8,6 +8,7 @@ from app.api.router import api_router
 from app.core.config import settings
 from app.db.session import SessionLocal
 from app.services.auth import bootstrap_admin_user
+from app.version import __version__
 
 
 @asynccontextmanager
@@ -19,7 +20,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 def create_app() -> FastAPI:
     settings.ensure_storage_dirs()
-    app = FastAPI(title="Listen Book API", version="0.4.1", lifespan=lifespan)
+    app = FastAPI(title="Listen Book API", version=__version__, lifespan=lifespan)
 
     app.add_middleware(
         CORSMiddleware,

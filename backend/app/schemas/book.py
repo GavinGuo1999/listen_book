@@ -41,6 +41,12 @@ class BookReviewUpdate(BaseModel):
     review_note: str | None = None
 
 
+class BookBatchReviewRequest(BaseModel):
+    book_ids: list[UUID] = Field(min_length=1, max_length=100)
+    review_status: str = Field(pattern="^(approved|rejected)$")
+    review_note: str | None = Field(default=None, max_length=1000)
+
+
 class SentenceRead(BaseModel):
     id: UUID
     sentence_index: int

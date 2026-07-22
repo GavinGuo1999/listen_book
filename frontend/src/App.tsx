@@ -2,8 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 
 import { AppSidebar } from "./components/AppSidebar";
 import { DeleteBookDialog } from "./components/DeleteBookDialog";
-import { useAdminReview } from "./hooks/useAdminReview";
+import { useAdminAudit } from "./hooks/useAdminAudit";
 import { useAdminJobs } from "./hooks/useAdminJobs";
+import { useAdminReview } from "./hooks/useAdminReview";
+import { useAdminSystem } from "./hooks/useAdminSystem";
+import { useAdminUsers } from "./hooks/useAdminUsers";
 import { useAudioPlayer } from "./hooks/useAudioPlayer";
 import { useAuth } from "./hooks/useAuth";
 import { useBooks } from "./hooks/useBooks";
@@ -23,6 +26,9 @@ export function App() {
   const player = useAudioPlayer(setError);
   const admin = useAdminReview(auth.currentUser?.is_admin ?? false, setError);
   const adminJobs = useAdminJobs(auth.currentUser?.is_admin ?? false, setError);
+  const adminSystem = useAdminSystem(auth.currentUser?.is_admin ?? false, setError);
+  const adminUsers = useAdminUsers(auth.currentUser?.is_admin ?? false, setError);
+  const adminAudit = useAdminAudit(auth.currentUser?.is_admin ?? false, setError);
 
   const selectedBook = useMemo(
     () => books.books.find((book) => book.id === player.selectedBookId) ?? null,
@@ -121,6 +127,11 @@ export function App() {
     await books.refresh(false);
   }
 
+  async function handleBatchReview(status: "approved" | "rejected") {
+    const updatedBooks = await admin.batchReview(status);
+    if (updatedBooks.length > 0) await books.refresh(false);
+  }
+
   if (auth.isCheckingAuth) return <AuthLoadingPage />;
 
   if (!auth.currentUser || currentPath === "/login") {
@@ -159,28 +170,16 @@ export function App() {
 
       {isAdminPage ? (
         <AdminReviewPage
+          audit={adminAudit}
+          currentUser={auth.currentUser}
           error={error}
-          filter={admin.filter}
-          filteredCount={admin.filteredBooks.length}
-          isLoading={admin.isLoading}
-          jobFilter={adminJobs.filter}
-          jobs={adminJobs.jobs}
-          jobsLoading={adminJobs.isLoading}
-          notesByBookId={admin.notesByBookId}
-          onFilterChange={admin.setFilter}
-          onJobFilterChange={adminJobs.changeFilter}
-          onJobsRefresh={adminJobs.refresh}
-          onNoteChange={admin.updateNote}
-          onPageChange={admin.setPage}
-          onRefresh={admin.refresh}
+          jobs={adminJobs}
+          onBatchReview={handleBatchReview}
           onReview={handleReview}
-          onRetryJob={adminJobs.retry}
           onSelectBook={player.selectBook}
-          page={admin.page}
-          pageCount={admin.pageCount}
-          pagedBooks={admin.pagedBooks}
-          reviewingBookId={admin.reviewingBookId}
-          retryingJobId={adminJobs.retryingJobId}
+          review={admin}
+          system={adminSystem}
+          users={adminUsers}
         />
       ) : (
         <ReaderPage
