@@ -1,19 +1,27 @@
+import json
+from pathlib import Path
+
 import pytest
 
 from app.services.text_splitter import split_paragraphs, split_sentences
 
+GOLDEN_CASES_PATH = (
+    Path(__file__).resolve().parents[2] / "samples" / "sentence_splitter_golden" / "cases.json"
+)
+
+
+def load_golden_cases() -> list[dict[str, object]]:
+    payload = json.loads(GOLDEN_CASES_PATH.read_text(encoding="utf-8"))
+    return payload["cases"]
+
 
 @pytest.mark.parametrize(
-    ("paragraph", "expected"),
-    [
-        ("“你去哪儿？”她问。", ["“你去哪儿？”", "她问。"]),
-        ("他说：“我不知道……也许明天吧。”", ["他说：“我不知道……也许明天吧。”"]),
-        ("Chapter 1. Mr. Smith arrived at 3 p.m.", ["Chapter 1.", "Mr. Smith arrived at 3 p.m."]),
-        ("第一章  雨夜", ["第一章  雨夜"]),
-    ],
+    "case",
+    load_golden_cases(),
+    ids=lambda case: str(case["id"]),
 )
-def test_sentence_splitter_golden_cases(paragraph: str, expected: list[str]) -> None:
-    assert split_sentences(paragraph) == expected
+def test_sentence_splitter_golden_cases(case: dict[str, object]) -> None:
+    assert split_sentences(str(case["input"])) == case["expected"]
 
 
 def test_split_paragraphs_normalizes_blank_lines_and_whitespace() -> None:

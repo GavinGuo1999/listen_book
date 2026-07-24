@@ -8,19 +8,19 @@ from app.models.audio import AudioAsset, AudioStatus
 from app.models.book import Sentence
 from app.models.job import JobType
 from app.services.jobs import enqueue_job
-from app.services.tts import TTSRequest, default_tts_provider
+from app.services.tts import TTSRequest, default_tts_provider, select_voice_for_text
 
-DEFAULT_VOICE = "zh-CN-XiaoxiaoNeural"
 DEFAULT_SPEED = 100
 
 
 def sentence_audio_stmt(sentence: Sentence):
     provider = default_tts_provider
+    voice = select_voice_for_text(sentence.text)
     return select(AudioAsset).where(
         AudioAsset.sentence_id == sentence.id,
         AudioAsset.model_name == provider.model_name,
         AudioAsset.model_version == provider.model_version,
-        AudioAsset.voice == DEFAULT_VOICE,
+        AudioAsset.voice == voice,
         AudioAsset.speed == DEFAULT_SPEED,
         AudioAsset.text_hash == sentence.text_hash,
     )
@@ -48,11 +48,12 @@ def ensure_pending_sentence_audio(
         return existing
 
     provider = default_tts_provider
+    voice = select_voice_for_text(sentence.text)
     asset = AudioAsset(
         sentence_id=sentence.id,
         model_name=provider.model_name,
         model_version=provider.model_version,
-        voice=DEFAULT_VOICE,
+        voice=voice,
         speed=DEFAULT_SPEED,
         text_hash=sentence.text_hash,
         status=AudioStatus.PENDING.value,
@@ -97,6 +98,7 @@ def generate_sentence_audio_asset(db: Session, sentence_id: UUID) -> AudioAsset:
         raise LookupError(f"Sentence not found: {sentence_id}")
 
     provider = default_tts_provider
+    voice = select_voice_for_text(sentence.text)
     existing = get_existing_sentence_audio(db, sentence)
     if (
         existing is not None
@@ -109,7 +111,7 @@ def generate_sentence_audio_asset(db: Session, sentence_id: UUID) -> AudioAsset:
         sentence_id=sentence.id,
         model_name=provider.model_name,
         model_version=provider.model_version,
-        voice=DEFAULT_VOICE,
+        voice=voice,
         speed=DEFAULT_SPEED,
         text_hash=sentence.text_hash,
         status=AudioStatus.PENDING.value,

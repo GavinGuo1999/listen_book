@@ -768,3 +768,31 @@ cd D:\listen_book
 1. 用户级音色/语速设置、连续播放下一章和睡眠定时器。
 2. 建立 TTS golden 样本评分记录和批量生成工具。
 3. 数据库与书籍文件备份、缓存容量统计和 GitHub Actions。
+
+## 最近交接记录：2026-07-24（v0.5.1 TTS 验收版）
+
+本轮完成：
+
+- 新增 `samples/sentence_splitter_golden/cases.json`，用 17 条中英文和混排用例固定句子边界。
+- 切句器支持连续终止符、句内/句末省略号、英文缩写/首字母/小数和内嵌英文引语。
+- 新增 `samples/tts_golden/cases.json`，固定 11 条样例的文本、音色、速度、rate 和 pitch。
+- 英文句子自动使用 `en-US-JennyNeural`；中文和中文占主导的混排句继续使用 `zh-CN-XiaoxiaoNeural`。
+- 英文轻声和喊话提示词进入轻量韵律规则，Edge TTS 模型规则版本升级为 `15`。
+- 中文句内带引号的英文短语按片段切换英文音色；“那一行/第 N 行”等场景使用不改变显示文本的发音别名确保读作 `háng`。
+- 新增 `scripts/generate_tts_golden.py`，支持 dry-run、按样例生成、确定文件名、哈希报告和试听索引。
+- 本地真实生成 11 个 MP3，均通过 `ffprobe` 解码检查；生成物保留在 Git 忽略目录。
+- 前后端及 FastAPI 版本统一升级为 `0.5.1`，无数据库结构变更。
+
+本轮验证：
+
+- `.venv\Scripts\python.exe -m pytest backend\tests -q`：`73 passed`。
+- `.venv\Scripts\ruff.exe check backend scripts`：通过。
+- `cd frontend && npm run build`：通过，版本 `0.5.1`。
+- `cd frontend && npm run test:e2e:sqlite`：`6 passed`。
+- 11 个 MP3 均可由 `ffprobe` 解码，试听索引在桌面和 390px 窄屏下无横向溢出。
+
+人工验收入口：
+
+1. 打开 `storage/audio/tts_golden/v0.5.1/index.html`。
+2. 按 `docs/v0.5.1-acceptance.md` 逐条试听。
+3. 在 `docs/tts-evaluation.md` 的评分维度下记录低于 3 分的具体样例和时间点。

@@ -1,0 +1,124 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "id": "zh-dialogue-attribution",
+      "language": "zh-CN",
+      "category": "dialogue",
+      "input": "“你去哪儿？”她问。",
+      "expected": ["“你去哪儿？”", "她问。"]
+    },
+    {
+      "id": "zh-dialogue-resume",
+      "language": "zh-CN",
+      "category": "dialogue",
+      "input": "“不是我。”他顿了顿，“是风。”",
+      "expected": ["“不是我。”", "他顿了顿，“是风。”"]
+    },
+    {
+      "id": "zh-dialogue-punctuation-cluster",
+      "language": "zh-CN",
+      "category": "dialogue",
+      "input": "“真的？！”他猛地站了起来。",
+      "expected": ["“真的？！”", "他猛地站了起来。"]
+    },
+    {
+      "id": "zh-embedded-ellipsis",
+      "language": "zh-CN",
+      "category": "ellipsis",
+      "input": "他说：“我不知道……也许明天吧。”",
+      "expected": ["他说：“我不知道……也许明天吧。”"]
+    },
+    {
+      "id": "zh-quoted-terminal-ellipsis",
+      "language": "zh-CN",
+      "category": "ellipsis",
+      "input": "“别走……”她低声说。门还是关上了。",
+      "expected": ["“别走……”", "她低声说。", "门还是关上了。"]
+    },
+    {
+      "id": "zh-spaced-ellipsis-boundary",
+      "language": "zh-CN",
+      "category": "ellipsis",
+      "input": "他没有回答…… 门外又响起了脚步声。",
+      "expected": ["他没有回答……", "门外又响起了脚步声。"]
+    },
+    {
+      "id": "zh-em-dash",
+      "language": "zh-CN",
+      "category": "punctuation",
+      "input": "门外传来一阵脚步声——很轻，却越来越近。",
+      "expected": ["门外传来一阵脚步声——很轻，却越来越近。"]
+    },
+    {
+      "id": "zh-chapter-title",
+      "language": "zh-CN",
+      "category": "heading",
+      "input": "第一章  雨夜",
+      "expected": ["第一章  雨夜"]
+    },
+    {
+      "id": "en-title-and-time",
+      "language": "en-US",
+      "category": "abbreviation",
+      "input": "Chapter 1. Mr. Smith arrived at 3 p.m. It was already dark.",
+      "expected": ["Chapter 1.", "Mr. Smith arrived at 3 p.m.", "It was already dark."]
+    },
+    {
+      "id": "en-initials",
+      "language": "en-US",
+      "category": "abbreviation",
+      "input": "J. R. R. Tolkien wrote the novel. It became famous.",
+      "expected": ["J. R. R. Tolkien wrote the novel.", "It became famous."]
+    },
+    {
+      "id": "en-acronym",
+      "language": "en-US",
+      "category": "abbreviation",
+      "input": "The U.S. Army officer waited. No one moved.",
+      "expected": ["The U.S. Army officer waited.", "No one moved."]
+    },
+    {
+      "id": "en-generic-initialism",
+      "language": "en-US",
+      "category": "abbreviation",
+      "input": "A U.N. observer entered the room. Everyone stood.",
+      "expected": ["A U.N. observer entered the room.", "Everyone stood."]
+    },
+    {
+      "id": "en-decimal",
+      "language": "en-US",
+      "category": "number",
+      "input": "The reading took 3.5 hours. Then the lights went out.",
+      "expected": ["The reading took 3.5 hours.", "Then the lights went out."]
+    },
+    {
+      "id": "en-quoted-dialogue",
+      "language": "en-US",
+      "category": "dialogue",
+      "input": "\"Are you sure?\" she asked. \"Absolutely.\"",
+      "expected": ["\"Are you sure?\"", "she asked.", "\"Absolutely.\""]
+    },
+    {
+      "id": "en-internal-ellipsis",
+      "language": "en-US",
+      "category": "ellipsis",
+      "input": "I thought... perhaps we should wait. Then the bell rang.",
+      "expected": ["I thought... perhaps we should wait.", "Then the bell rang."]
+    },
+    {
+      "id": "en-ellipsis-boundary",
+      "language": "en-US",
+      "category": "ellipsis",
+      "input": "No one answered... The hallway remained empty.",
+      "expected": ["No one answered...", "The hallway remained empty."]
+    },
+    {
+      "id": "mixed-quoted-english",
+      "language": "mixed",
+      "category": "mixed",
+      "input": "她翻到第 12 页，停在 “The End.” 那一行。然后合上了书。",
+      "expected": ["她翻到第 12 页，停在 “The End.” 那一行。", "然后合上了书。"]
+    }
+  ]
+}

@@ -1,0 +1,130 @@
+{
+  "schema_version": 1,
+  "suite_version": "v0.5.1",
+  "cases": [
+    {
+      "id": "zh-dialogue-plain",
+      "language": "zh-CN",
+      "category": "dialogue",
+      "text": "“我马上回来。”",
+      "speed": 100,
+      "expected_voice": "zh-CN-XiaoxiaoNeural",
+      "expected_rate": "+2%",
+      "expected_pitch": "+4Hz"
+    },
+    {
+      "id": "zh-dialogue-question",
+      "language": "zh-CN",
+      "category": "dialogue",
+      "text": "“你真的听见了吗？”",
+      "speed": 100,
+      "expected_voice": "zh-CN-XiaoxiaoNeural",
+      "expected_rate": "+2%",
+      "expected_pitch": "+4Hz"
+    },
+    {
+      "id": "zh-dialogue-soft",
+      "language": "zh-CN",
+      "category": "dialogue",
+      "text": "她低声说道：“别惊动他们。”",
+      "speed": 100,
+      "expected_voice": "zh-CN-XiaoxiaoNeural",
+      "expected_rate": "-3%",
+      "expected_pitch": "-4Hz"
+    },
+    {
+      "id": "zh-dialogue-strong",
+      "language": "zh-CN",
+      "category": "dialogue",
+      "text": "他大声喊道：“快走！”",
+      "speed": 100,
+      "expected_voice": "zh-CN-XiaoxiaoNeural",
+      "expected_rate": "+11%",
+      "expected_pitch": "+12Hz"
+    },
+    {
+      "id": "zh-narration-long",
+      "language": "zh-CN",
+      "category": "narration",
+      "text": "夜色渐渐深了，风从窗缝里吹进来，灯影在墙上摇晃，屋里的人都沉默着，又过了许久，谁也没有先开口。",
+      "speed": 100,
+      "expected_voice": "zh-CN-XiaoxiaoNeural",
+      "expected_rate": "-7%",
+      "expected_pitch": "+0Hz"
+    },
+    {
+      "id": "zh-narration-ellipsis",
+      "language": "zh-CN",
+      "category": "narration",
+      "text": "他望着远处，半天没有说话……",
+      "speed": 100,
+      "expected_voice": "zh-CN-XiaoxiaoNeural",
+      "expected_rate": "-8%",
+      "expected_pitch": "-6Hz"
+    },
+    {
+      "id": "en-narration",
+      "language": "en-US",
+      "category": "narration",
+      "text": "The room was quiet, and the rain tapped softly against the window.",
+      "speed": 100,
+      "expected_voice": "en-US-JennyNeural",
+      "expected_rate": "-4%",
+      "expected_pitch": "+0Hz"
+    },
+    {
+      "id": "en-dialogue-question",
+      "language": "en-US",
+      "category": "dialogue",
+      "text": "\"Are you coming with us?\"",
+      "speed": 100,
+      "expected_voice": "en-US-JennyNeural",
+      "expected_rate": "+2%",
+      "expected_pitch": "+4Hz"
+    },
+    {
+      "id": "en-dialogue-soft",
+      "language": "en-US",
+      "category": "dialogue",
+      "text": "\"Stay here,\" she whispered.",
+      "speed": 100,
+      "expected_voice": "en-US-JennyNeural",
+      "expected_rate": "-3%",
+      "expected_pitch": "-4Hz"
+    },
+    {
+      "id": "en-dialogue-strong",
+      "language": "en-US",
+      "category": "dialogue",
+      "text": "\"Run!\" he shouted.",
+      "speed": 100,
+      "expected_voice": "en-US-JennyNeural",
+      "expected_rate": "+7%",
+      "expected_pitch": "+10Hz"
+    },
+    {
+      "id": "mixed-narration",
+      "language": "mixed",
+      "category": "mixed",
+      "text": "她翻到第 12 页，停在 “The End.” 那一行。",
+      "speed": 100,
+      "expected_voice": "zh-CN-XiaoxiaoNeural",
+      "expected_rate": "+0%",
+      "expected_pitch": "+0Hz",
+      "expected_segments": [
+        {
+          "text": "她翻到第 12 页，停在",
+          "voice": "zh-CN-XiaoxiaoNeural"
+        },
+        {
+          "text": "The End.",
+          "voice": "en-US-JennyNeural"
+        },
+        {
+          "text": "那一航。",
+          "voice": "zh-CN-XiaoxiaoNeural"
+        }
+      ]
+    }
+  ]
+}

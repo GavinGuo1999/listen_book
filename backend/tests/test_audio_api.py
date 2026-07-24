@@ -10,7 +10,7 @@ from app.models.audio import AudioAsset, AudioStatus
 from app.models.book import Book, BookStatus, Chapter, Paragraph, Sentence
 from app.models.job import Job, JobStatus, JobType
 from app.services.text_splitter import text_hash
-from app.services.tts import TTSRequest, TTSResult
+from app.services.tts import ENGLISH_VOICE, TTSRequest, TTSResult
 from app.workers import jobs
 
 
@@ -77,6 +77,26 @@ def test_generate_sentence_audio_creates_ready_asset_and_serves_file(
     cached_response = client.post(f"/api/audio/sentences/{sentence.id}", headers=headers)
     assert cached_response.status_code == 200
     assert cached_response.json()["id"] == payload["id"]
+    assert fake_tts.calls == 1
+
+
+def test_generate_sentence_audio_selects_english_voice(
+    client: TestClient,
+    db_session: Session,
+    fake_tts: FakeTTSProvider,
+) -> None:
+    _book, sentence = create_ready_book(
+        db_session,
+        title="English Audio",
+        sentence_text="The hallway remained empty.",
+    )
+    headers = auth_headers(register_user(client, username="english-audio-reader"))
+
+    response = client.post(f"/api/audio/sentences/{sentence.id}", headers=headers)
+
+    assert response.status_code == 200
+    drain_jobs(db_session)
+    assert db_session.query(AudioAsset).one().voice == ENGLISH_VOICE
     assert fake_tts.calls == 1
 
 
@@ -277,7 +297,11 @@ def test_audio_file_endpoint_rejects_unready_missing_and_outside_storage_assets(
     assert not_found_response.status_code == 404
 
 
-def create_ready_book(db_session: Session, title: str = "Audio Sample") -> tuple[Book, Sentence]:
+def create_ready_book(
+    db_session: Session,
+    title: str = "Audio Sample",
+    sentence_text: str = "第一句。",
+) -> tuple[Book, Sentence]:
     book = Book(title=title, status=BookStatus.READY.value)
     db_session.add(book)
     db_session.flush()
@@ -286,15 +310,15 @@ def create_ready_book(db_session: Session, title: str = "Audio Sample") -> tuple
     db_session.add(chapter)
     db_session.flush()
 
-    paragraph = Paragraph(chapter_id=chapter.id, paragraph_index=0, text="第一句。")
+    paragraph = Paragraph(chapter_id=chapter.id, paragraph_index=0, text=sentence_text)
     db_session.add(paragraph)
     db_session.flush()
 
     sentence = Sentence(
         paragraph_id=paragraph.id,
         sentence_index=0,
-        text="第一句。",
-        text_hash=text_hash("第一句。"),
+        text=sentence_text,
+        text_hash=text_hash(sentence_text),
     )
     db_session.add(sentence)
     db_session.commit()

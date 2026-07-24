@@ -1,4 +1,5 @@
 import asyncio
+import re
 import subprocess
 import tempfile
 from dataclasses import dataclass
@@ -7,11 +8,21 @@ from uuid import uuid4
 
 from app.core.config import settings
 
+CHINESE_VOICE = "zh-CN-XiaoxiaoNeural"
+ENGLISH_VOICE = "en-US-JennyNeural"
+QUOTED_ENGLISH_RE = re.compile(
+    r"""(?P<open>["“])\s*(?P<text>[A-Za-z][A-Za-z0-9 .,!?'":;\-]*?)\s*(?P<close>["”])"""
+)
+LINE_MEASURE_RE = re.compile(
+    r"(?P<prefix>(?:第\s*[0-9一二三四五六七八九十百千两]+\s*|[这那哪每]一))"
+    r"行(?!动)"
+)
+
 
 @dataclass(frozen=True)
 class TTSRequest:
     text: str
-    voice: str = "zh-CN-XiaoxiaoNeural"
+    voice: str = CHINESE_VOICE
     speed: int = 100
 
 
@@ -19,6 +30,35 @@ class TTSRequest:
 class TTSResult:
     audio_path: str
     duration_ms: int | None = None
+
+
+@dataclass(frozen=True)
+class TTSSegment:
+    text: str
+    voice: str
+
+
+def normalize_spoken_text(text: str) -> str:
+    return LINE_MEASURE_RE.sub(lambda match: f"{match.group('prefix')}航", text)
+
+
+def build_tts_segments(text: str, default_voice: str) -> tuple[TTSSegment, ...]:
+    if default_voice != CHINESE_VOICE or not any("\u3400" <= char <= "\u9fff" for char in text):
+        return (TTSSegment(text=normalize_spoken_text(text), voice=default_voice),)
+
+    segments: list[TTSSegment] = []
+    start = 0
+    for match in QUOTED_ENGLISH_RE.finditer(text):
+        chinese_text = normalize_spoken_text(text[start : match.start()]).strip()
+        if chinese_text:
+            segments.append(TTSSegment(text=chinese_text, voice=CHINESE_VOICE))
+        segments.append(TTSSegment(text=match.group("text").strip(), voice=ENGLISH_VOICE))
+        start = match.end()
+
+    chinese_tail = normalize_spoken_text(text[start:]).strip()
+    if chinese_tail:
+        segments.append(TTSSegment(text=chinese_tail, voice=CHINESE_VOICE))
+    return tuple(segments) or (TTSSegment(text=normalize_spoken_text(text), voice=default_voice),)
 
 
 class TTSProvider:
@@ -107,7 +147,7 @@ class WindowsSapiTTSProvider(TTSProvider):
 
 class EdgeTTSProvider(TTSProvider):
     model_name = "edge-tts"
-    model_version = "13"
+    model_version = "15"
 
     CLOSING_PUNCTUATION = "\"'\u201d\u2019\uff09)]\u300b\u3011\u300d\u300f"
     DIALOGUE_OPENERS = ("\"", "'", "\u201c", "\u2018", "\u300c", "\u300e")
@@ -125,6 +165,18 @@ class EdgeTTSProvider(TTSProvider):
         "\u5927\u58f0",
         "\u6012\u9053",
         "\u559d\u9053",
+    )
+    ENGLISH_SOFT_SPEECH_MARKERS = (
+        "whispered",
+        "murmured",
+        "said softly",
+        "asked softly",
+    )
+    ENGLISH_STRONG_SPEECH_MARKERS = (
+        "shouted",
+        "yelled",
+        "screamed",
+        "cried out",
     )
     QUESTION_ENDINGS = ("?", "\uff1f")
     QUESTION_PARTICLES = (
@@ -157,6 +209,7 @@ class EdgeTTSProvider(TTSProvider):
         rate_delta = max(-50, min(100, speed - 100))
         pitch = "+0Hz"
         stripped = text.strip().rstrip(self.CLOSING_PUNCTUATION)
+        normalized = stripped.casefold()
         sentence_length = len(stripped)
 
         if sentence_length >= 70:
@@ -172,10 +225,16 @@ class EdgeTTSProvider(TTSProvider):
             rate_delta += 2
             pitch = "+4Hz"
 
-        if any(marker in stripped for marker in self.SOFT_SPEECH_MARKERS):
+        has_soft_marker = any(marker in stripped for marker in self.SOFT_SPEECH_MARKERS) or any(
+            marker in normalized for marker in self.ENGLISH_SOFT_SPEECH_MARKERS
+        )
+        has_strong_marker = any(
+            marker in stripped for marker in self.STRONG_SPEECH_MARKERS
+        ) or any(marker in normalized for marker in self.ENGLISH_STRONG_SPEECH_MARKERS)
+        if has_soft_marker:
             rate_delta -= 5
             pitch = "-4Hz"
-        elif any(marker in stripped for marker in self.STRONG_SPEECH_MARKERS):
+        elif has_strong_marker:
             rate_delta += 5
             pitch = "+10Hz"
 
@@ -195,15 +254,31 @@ class EdgeTTSProvider(TTSProvider):
         settings.audio_dir.mkdir(parents=True, exist_ok=True)
         audio_path = settings.audio_dir / f"{uuid4()}.mp3"
         rate, pitch = self.infer_prosody(request.text, request.speed)
+        segments = build_tts_segments(request.text, request.voice)
 
         async def save_audio() -> None:
-            communicate = edge_tts.Communicate(
-                request.text,
-                request.voice,
-                rate=rate,
-                pitch=pitch,
-            )
-            await communicate.save(str(audio_path))
+            if len(segments) == 1:
+                segment = segments[0]
+                communicate = edge_tts.Communicate(
+                    segment.text,
+                    segment.voice,
+                    rate=rate,
+                    pitch=pitch,
+                )
+                await communicate.save(str(audio_path))
+                return
+
+            with audio_path.open("wb") as output:
+                for segment in segments:
+                    communicate = edge_tts.Communicate(
+                        segment.text,
+                        segment.voice,
+                        rate=rate,
+                        pitch=pitch,
+                    )
+                    async for chunk in communicate.stream():
+                        if chunk["type"] == "audio":
+                            output.write(chunk["data"])
 
         asyncio.run(save_audio())
 
@@ -211,6 +286,14 @@ class EdgeTTSProvider(TTSProvider):
             raise RuntimeError("TTS provider created an empty audio file")
 
         return TTSResult(audio_path=str(audio_path))
+
+
+def select_voice_for_text(text: str) -> str:
+    cjk_count = sum(1 for char in text if "\u3400" <= char <= "\u9fff")
+    latin_count = sum(1 for char in text if char.isascii() and char.isalpha())
+    if latin_count and (cjk_count == 0 or latin_count >= cjk_count * 2):
+        return ENGLISH_VOICE
+    return CHINESE_VOICE
 
 
 default_tts_provider = EdgeTTSProvider()

@@ -234,15 +234,32 @@ PATCH /api/books/{book_id}/review
 
 ## 朗读语气
 
-- 当前真实 TTS provider 使用 `edge-tts`，模型版本为 `13`。
+- 当前真实 TTS provider 使用 `edge-tts`，模型规则版本为 `15`。
 - 语气规则会根据句子特征调整语速和音高：
   - 普通疑问句保持中性，不再额外升调。
   - 对白略提高音高、略加快，和旁白做基础区分。
   - 长句、逗号密集句降低语速，减少赶读感。
   - 省略号/破折号进一步放慢。
-  - “低声/轻声/喃喃”等轻声标记放低音高，“大声/喊道/怒道”等强情绪标记提高音高。
+- “低声/轻声/喃喃”等轻声标记放低音高，“大声/喊道/怒道”等强情绪标记提高音高。
+- 英文句子自动使用 `en-US-JennyNeural`，中文和中文占主导的混排句使用 `zh-CN-XiaoxiaoNeural`。
+- 中文句子内带引号的英文短语会单独使用英文音色；“那一行/第 N 行”等量词场景通过只作用于音频的同音别名固定为 `háng`。
+- 英文 `whispered`、`murmured`、`shouted`、`yelled` 等对白提示词参与轻量韵律调整。
 - 这仍是轻量规则；尚未实现按角色分配不同音色。
-- 固定评测样例位于 `samples/tts_golden/`，评分口径见 `docs/tts-evaluation.md`。调整 TTS 或切句规则后，优先用这组样例听测，避免凭感觉反复改规则。
+- 切句黄金夹具位于 `samples/sentence_splitter_golden/cases.json`，TTS 参数夹具位于 `samples/tts_golden/cases.json`。
+
+先执行不联网的规则校验：
+
+```powershell
+.venv\Scripts\python.exe scripts\generate_tts_golden.py --dry-run
+```
+
+生成全部固定试听样本：
+
+```powershell
+.venv\Scripts\python.exe scripts\generate_tts_golden.py --force
+```
+
+输出位于 `storage/audio/tts_golden/<suite_version>/`，包括确定命名的 MP3、`report.json` 和 `index.html`。该目录已由 `storage/audio/*` 规则忽略，不进入 Git。评分口径见 `docs/tts-evaluation.md`。
 
 ## 后台 worker
 
